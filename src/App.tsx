@@ -1,6 +1,6 @@
 import { useState, useCallback } from 'react';
 import { ProfileProvider, useProfile } from './state/ProfileContext';
-import { Route, Navigate } from './nav';
+import { Route, Navigate } from './nav'; // v2
 
 import OnboardingScreen from './screens/OnboardingScreen';
 import HomeScreen from './screens/HomeScreen';
