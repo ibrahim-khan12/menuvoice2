@@ -239,12 +239,39 @@ export default function ConversationScreen({
             }}
           />
         </div>
+      ) : phase === 'speaking' ? (
+        <div className="col" style={{ gap: 8 }}>
+          <div
+            style={{
+              height: 8,
+              borderRadius: 4,
+              background: 'var(--surface-high)',
+              overflow: 'hidden',
+            }}
+          >
+            <div
+              style={{
+                height: '100%',
+                width: '100%',
+                background: 'var(--accent)',
+                animation: 'pulse-bar 1.4s ease-in-out infinite',
+                transformOrigin: 'left',
+              }}
+            />
+          </div>
+          <SecondaryButton
+            label="Skip"
+            hint="Stop speaking and go to your turn"
+            onClick={() => { stopSpeaking(); setPhase('idle'); }}
+            style={{ minHeight: 70 }}
+          />
+        </div>
       ) : phase === 'recording' ? (
         <PrimaryButton
-          label="Done"
+          label="■  Done speaking"
           hint="Stop listening and get a response"
           onClick={finishListening}
-          style={{ minHeight: 110, background: 'var(--success)' }}
+          style={{ minHeight: 110, background: 'var(--success)', animation: 'mic-pulse 1.5s ease-out infinite' }}
         />
       ) : (
         <PrimaryButton

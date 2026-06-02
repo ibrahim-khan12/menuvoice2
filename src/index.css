@@ -166,3 +166,16 @@ body {
   border-radius: var(--r-md);
   padding: 20px;
 }
+
+/* Speaking progress bar animation */
+@keyframes pulse-bar {
+  0%   { transform: scaleX(0.05); opacity: 0.6; }
+  50%  { transform: scaleX(1);    opacity: 1;   }
+  100% { transform: scaleX(0.05); opacity: 0.6; }
+}
+
+/* Mic pulse when recording */
+@keyframes mic-pulse {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(123, 216, 143, 0.4); }
+  50%       { box-shadow: 0 0 0 12px rgba(123, 216, 143, 0); }
+}
