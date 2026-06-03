@@ -6,6 +6,7 @@ import { ParsedMenu } from './types';
 export type Route =
   | { name: 'home' }
   | { name: 'capture' }
+  | { name: 'url' }
   | { name: 'conversation'; menu: ParsedMenu; restaurantName: string }
   | { name: 'saved' }
   | { name: 'settings' };

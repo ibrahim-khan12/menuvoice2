@@ -235,6 +235,55 @@ export async function extractSessionLearnings(turns: ChatTurn[]): Promise<Sessio
   }
 }
 
+/** Restaurant website URL -> structured menu (scrape then GPT parse). */
+export async function parseMenuFromUrl(url: string): Promise<ParsedMenu> {
+  const scrapeRes = await fetch('/api/scrape', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ url }),
+  });
+  if (!scrapeRes.ok) {
+    const err = await scrapeRes.json().catch(() => ({}));
+    throw new Error((err as any).error ?? `Could not fetch that website (${scrapeRes.status}).`);
+  }
+  const { text } = (await scrapeRes.json()) as { text: string };
+  if (!text?.trim()) throw new Error('That page appears to be empty. Try the direct menu URL.');
+
+  const json = await chatCompletions({
+    model: VISION_MODEL,
+    messages: [
+      {
+        role: 'user',
+        content:
+          'You are reading text scraped from a restaurant website. Extract every menu item visible. ' +
+          'Group items into natural sections (appetizers, mains, desserts, drinks, specials, etc.). ' +
+          'For each item include: name, description (if shown), price (as written, with currency symbol), ' +
+          'and a best-effort ingredients list inferred from the name and description. ' +
+          'Extract the restaurant name if visible. ' +
+          'If no menu items are found, set categories to an empty array. ' +
+          'Respond ONLY with JSON: {"restaurantName":string|null,"categories":[{"name":string,"items":[{"name":string,"description":string,"price":string,"ingredients":string[]}]}],"notes":string}\n\n' +
+          'WEBSITE TEXT:\n' + text,
+      },
+    ],
+    response_format: { type: 'json_object' },
+    temperature: 0.1,
+  });
+
+  const raw = json.choices?.[0]?.message?.content ?? '{}';
+  let parsed: ParsedMenu;
+  try {
+    parsed = JSON.parse(raw);
+  } catch {
+    throw new Error('The menu reader returned something unexpected. Try a different URL.');
+  }
+  if (!parsed.categories || parsed.categories.length === 0) {
+    throw new Error(
+      'I could not find menu items on that page. Try linking directly to the menu page (e.g. /menu or /food).'
+    );
+  }
+  return parsed;
+}
+
 /** Text -> mp3 Blob (OpenAI TTS). */
 export async function synthesizeSpeech(text: string, voice?: string): Promise<Blob> {
   return audioSpeech({

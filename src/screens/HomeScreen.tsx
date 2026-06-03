@@ -17,20 +17,22 @@ export default function HomeScreen({ navigate }: ScreenProps) {
     commands: [
       { id: 'new',      keywords: ['new', 'scan', 'capture', 'restaurant', 'start', 'menu'] },
       { id: 'saved',    keywords: ['saved', 'previous', 'history', 'old', 'my restaurants'] },
+      { id: 'url',      keywords: ['website', 'url', 'link', 'online', 'web', 'internet', 'site'] },
       { id: 'settings', keywords: ['settings', 'setting', 'preferences', 'change', 'voice', 'allerg'] },
     ],
     onCommand: async (id) => {
-      if (id === 'new')      navigate({ name: 'capture' });
+      if (id === 'new')           navigate({ name: 'capture' });
       else if (id === 'saved')    navigate({ name: 'saved' });
+      else if (id === 'url')      navigate({ name: 'url' });
       else if (id === 'settings') navigate({ name: 'settings' });
     },
     onNoMatch: () =>
-      'Say "new restaurant" to scan a menu, "saved" to open a saved one, or "settings".',
+      'Say "new restaurant" to scan a menu, "website" to use a URL, "saved" for a saved one, or "settings".',
   });
 
   useEffect(() => {
     announce(
-      `Hello${name}. Say "new restaurant" to scan a menu, "saved" for a saved one, or "settings".`
+      `Hello${name}. Say "new restaurant" to scan a menu, "website" to use a URL, "saved" for a saved one, or "settings".`
     );
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -61,6 +63,12 @@ export default function HomeScreen({ navigate }: ScreenProps) {
           hint="Open a menu you captured before"
           onClick={() => navigate({ name: 'saved' })}
           style={{ minHeight: 96 }}
+        />
+        <SecondaryButton
+          label="Menu from Website"
+          hint="Paste a restaurant's URL and I'll read the menu"
+          onClick={() => navigate({ name: 'url' })}
+          style={{ minHeight: 72 }}
         />
       </div>
 
