@@ -34,10 +34,10 @@ export default function HomeScreen({ navigate }: ScreenProps) {
 
   const busy = phase === 'announcing' || phase === 'transcribing';
   const micLabel =
-    phase === 'recording'    ? '■  Done speaking' :
-    phase === 'transcribing' ? 'Hearing you…'     :
-    phase === 'announcing'   ? 'Please wait…'     :
-                               '🎤  Tap to speak a command';
+    phase === 'recording'    ? 'Done speaking' :
+    phase === 'transcribing' ? 'Hearing you…'  :
+    phase === 'announcing'   ? 'Please wait…'  :
+                               'Tap to speak a command';
 
   return (
     <Screen>

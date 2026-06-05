@@ -269,7 +269,7 @@ export default function ConversationScreen({
         </div>
       ) : phase === 'recording' ? (
         <PrimaryButton
-          label="■  Done speaking"
+          label="Done speaking"
           hint="Stop listening and get a response"
           onClick={finishListening}
           className="btn-recording"
@@ -277,7 +277,7 @@ export default function ConversationScreen({
         />
       ) : (
         <PrimaryButton
-          label={phase === 'idle' ? '🎤  Tap to talk' : 'Please wait…'}
+          label={phase === 'idle' ? 'Tap to talk' : 'Please wait…'}
           hint="Start speaking to MenuVoice"
           onClick={beginListening}
           disabled={phase !== 'idle'}

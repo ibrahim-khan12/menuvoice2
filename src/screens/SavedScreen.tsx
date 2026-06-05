@@ -85,10 +85,10 @@ export default function SavedScreen({ navigate, goBack }: ScreenProps) {
 
   const busy = phase === 'announcing' || phase === 'transcribing';
   const micLabel =
-    phase === 'recording'    ? '■  Done speaking' :
-    phase === 'transcribing' ? 'Hearing you…'     :
-    phase === 'announcing'   ? 'Please wait…'     :
-                               '🎤  Tap to speak';
+    phase === 'recording'    ? 'Done speaking' :
+    phase === 'transcribing' ? 'Hearing you…'  :
+    phase === 'announcing'   ? 'Please wait…'  :
+                               'Tap to speak';
 
   return (
     <Screen>

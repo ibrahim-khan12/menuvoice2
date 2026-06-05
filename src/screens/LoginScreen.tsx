@@ -116,7 +116,7 @@ export default function LoginScreen() {
   };
 
   const micLabel =
-    rec === 'recording' ? '■  Done speaking' : rec === 'working' ? 'One moment…' : '🎤  Say your email';
+    rec === 'recording' ? 'Done speaking' : rec === 'working' ? 'One moment…' : 'Say your email';
 
   return (
     <Screen>

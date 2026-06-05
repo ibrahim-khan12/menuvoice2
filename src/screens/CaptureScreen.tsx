@@ -333,7 +333,7 @@ export default function CaptureScreen({ navigate, goBack }: ScreenProps) {
           style={{ padding: '8px 16px' }}
           aria-label={`${photos.length} photo${photos.length === 1 ? '' : 's'} captured`}
         >
-          <strong style={{ fontSize: 22 }}>{photos.length} 📷</strong>
+          <strong style={{ fontSize: 22 }}>{photos.length} photo{photos.length === 1 ? '' : 's'}</strong>
         </div>
       </div>
 
@@ -362,7 +362,7 @@ export default function CaptureScreen({ navigate, goBack }: ScreenProps) {
             cursor: 'pointer',
           }}
         >
-          {nameRecState === 'recording' ? '■' : nameRecState === 'working' ? '…' : '🎤'}
+          {nameRecState === 'recording' ? 'Stop' : nameRecState === 'working' ? '…' : 'Mic'}
         </button>
       </div>
 
@@ -477,10 +477,10 @@ export default function CaptureScreen({ navigate, goBack }: ScreenProps) {
         {photos.length > 0 && !analyzing && (
           <PrimaryButton
             label={
-              voicePhase === 'recording'    ? '■  Done speaking' :
-              voicePhase === 'transcribing' ? 'Hearing you…'     :
-              voicePhase === 'announcing'   ? 'Please wait…'     :
-                                              '🎤  Say "analyze", "another", or "cancel"'
+              voicePhase === 'recording'    ? 'Done speaking' :
+              voicePhase === 'transcribing' ? 'Hearing you…'  :
+              voicePhase === 'announcing'   ? 'Please wait…'  :
+                                              'Say "analyze", "another", or "cancel"'
             }
             hint="Voice command: analyze, another photo, or cancel"
             onClick={voicePhase === 'recording' ? voiceDone : voiceListen}

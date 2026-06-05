@@ -174,7 +174,7 @@ function VoiceStep({
     }
   };
 
-  const micLabel = rec === 'recording' ? '■  Done speaking' : rec === 'working' ? 'One moment…' : '🎤  Tap and speak';
+  const micLabel = rec === 'recording' ? 'Done speaking' : rec === 'working' ? 'One moment…' : 'Tap and speak';
 
   return (
     <div className="col">
