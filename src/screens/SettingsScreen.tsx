@@ -28,8 +28,8 @@ function extractAfterKeyword(transcript: string, keywords: string[]): string {
   return '';
 }
 
-export default function SettingsScreen({ goBack }: ScreenProps) {
-  const { profile, update } = useProfile();
+export default function SettingsScreen({ goBack, navigate }: ScreenProps) {
+  const { profile, update, reset } = useProfile();
   const [allergies, setAllergies] = useState(profile.allergies.join(', '));
   const [cuisines, setCuisines] = useState(profile.cuisinesLiked.join(', '));
   const [saved, setSaved] = useState(false);
@@ -279,10 +279,10 @@ export default function SettingsScreen({ goBack }: ScreenProps) {
   const busy = phase === 'announcing' || phase === 'transcribing';
   const anyInlineMicBusy = nameRec !== 'idle' || dislikeRec !== 'idle';
   const micLabel =
-    phase === 'recording'    ? '■  Done speaking' :
-    phase === 'transcribing' ? 'Hearing you…'     :
-    phase === 'announcing'   ? 'Please wait…'     :
-                               '🎤  Tap to speak a command';
+    phase === 'recording'    ? 'Done speaking' :
+    phase === 'transcribing' ? 'Hearing you…'  :
+    phase === 'announcing'   ? 'Please wait…'  :
+                               'Tap to speak a command';
 
   return (
     <Screen>
@@ -316,7 +316,7 @@ export default function SettingsScreen({ goBack }: ScreenProps) {
             cursor: 'pointer',
           }}
         >
-          {nameRec === 'recording' ? '■' : nameRec === 'working' ? '…' : '🎤'}
+          {nameRec === 'recording' ? 'Stop' : nameRec === 'working' ? '…' : 'Mic'}
         </button>
       </div>
 
@@ -406,7 +406,7 @@ export default function SettingsScreen({ goBack }: ScreenProps) {
             cursor: 'pointer',
           }}
         >
-          {dislikeRec === 'recording' ? '■' : dislikeRec === 'working' ? '…' : '🎤'}
+          {dislikeRec === 'recording' ? 'Stop' : dislikeRec === 'working' ? '…' : 'Mic'}
         </button>
       </div>
 
@@ -488,8 +488,14 @@ export default function SettingsScreen({ goBack }: ScreenProps) {
         }}
       />
 
-      <PrimaryButton label={saved ? 'Saved ✓' : 'Save changes'} onClick={persist} />
+      <PrimaryButton label={saved ? 'Saved' : 'Save changes'} onClick={persist} />
       <SecondaryButton label="Back" onClick={goBack} />
+      <SecondaryButton
+        label="Sign out"
+        tone="danger"
+        hint="Clear your account and return to the login screen"
+        onClick={async () => { await reset(); navigate({ name: 'home' }); }}
+      />
     </Screen>
   );
 }
