@@ -9,7 +9,7 @@
 import { ParsedMenu, UserProfile, ChatTurn } from '../types';
 
 const DIRECT_KEY = import.meta.env.VITE_OPENAI_API_KEY ?? '';
-const VISION_MODEL = 'gpt-5.4';
+const VISION_MODEL = 'gpt-5.4-mini';
 const CHAT_MODEL = 'gpt-5.4-mini';
 const TTS_MODEL = 'tts-1-hd';
 const TTS_VOICE_DEFAULT = 'shimmer';
