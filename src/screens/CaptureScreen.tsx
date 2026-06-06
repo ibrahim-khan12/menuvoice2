@@ -372,7 +372,7 @@ export default function CaptureScreen({ navigate, goBack }: ScreenProps) {
         aria-label={`Auto capture ${autoMode ? 'on' : 'off'}. Tap to turn ${autoMode ? 'off' : 'on'}.`}
         className="btn"
         style={{
-          minHeight: 56,
+          minHeight: 64,
           border: `2px solid ${autoMode ? 'var(--accent)' : 'var(--border)'}`,
           background: autoMode ? 'var(--surface-high)' : 'var(--surface)',
           color: autoMode ? 'var(--accent)' : 'var(--text-secondary)',
@@ -389,7 +389,7 @@ export default function CaptureScreen({ navigate, goBack }: ScreenProps) {
           background: '#000',
           borderRadius: 'var(--r-lg)',
           overflow: 'hidden',
-          border: `3px solid ${
+          border: `5px solid ${
             !autoMode ? 'var(--border)' :
             captureStateDraw === 'steadying' ? 'var(--success)' :
             captureStateDraw === 'moving' ? '#ffc800' :

@@ -1,54 +1,48 @@
-// MenuVoice design tokens.
-// Dark mode, warm amber accent, WCAG AAA contrast, large type, generous touch targets.
-// Built per menuvoice_wireframe_prompt.md.
+// MenuVoice design tokens — mirrors CSS custom properties in index.css.
+// WCAG AAA contrast throughout. Minimum 64×64 touch targets.
 
 export const colors = {
-  // Background ramp
-  bg: '#0E0E10', // near-black base
-  surface: '#1A1A1E', // raised cards
-  surfaceHigh: '#26262C', // pressed / focused fill
+  bg:           '#0d0d0f',
+  surface:      '#18181c',
+  surfaceHigh:  '#222227',
+  surfaceUser:  '#261e1a',
 
-  // Text. On #0E0E10:
-  textPrimary: '#F5F3EE', // ~16.5:1  (AAA)
-  textSecondary: '#C9C6BE', // ~10.5:1 (AAA)
-  textMuted: '#A19D94', // ~7.2:1   (AAA)
+  textPrimary:   '#f4f2ed',  // ~17:1 on bg (AAA)
+  textSecondary: '#c8c5bd',  // ~11:1 on bg (AAA)
+  textMuted:     '#9e9a91',  // ~7:1  on bg (AAA)
 
-  // Warm amber accent. amber on dark bg, gold-leaning.
-  accent: '#FFB454', // ~10.8:1 on bg (AAA)
-  accentText: '#0E0E10', // text ON the accent button (dark on amber ~10.8:1)
+  accent:      '#ffb454',
+  accentWarm:  '#ffc47a',
+  accentText:  '#0d0d0f',
 
-  // States
-  focus: '#FFD08A', // bright focus ring
-  danger: '#FF6B6B', // allergen warning
-  dangerText: '#0E0E10',
-  success: '#7BD88F',
+  focus:   '#ffd08a',
+  danger:  '#ff6b6b',
+  success: '#6dd68a',
 
-  border: '#3A3A42',
+  border: '#2a2a32',
 };
 
 export const type = {
-  // Minimum body 18px per spec. Calm scale, not a shout.
-  display: 34,
-  heading: 28,
-  subheading: 22,
-  body: 18,
-  button: 20,
-  caption: 15,
+  display:    36,
+  heading:    22,
+  subheading: 20,
+  body:       17,
+  button:     18,
+  caption:    14,
 };
 
 export const space = {
   xs: 6,
-  sm: 12,
-  md: 20,
-  lg: 28,
-  xl: 40,
+  sm: 10,
+  md: 16,
+  lg: 24,
+  xl: 36,
 };
 
 export const radius = {
   sm: 10,
-  md: 16,
-  lg: 24,
+  md: 14,
+  lg: 22,
 };
 
-// Minimum interactive size per spec: 64x64.
 export const TOUCH_MIN = 64;

@@ -22,3 +22,4 @@ _env.txt
 _envcheck.txt
 
 .vercel
+.gstack/

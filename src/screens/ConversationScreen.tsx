@@ -41,6 +41,7 @@ export default function ConversationScreen({
   const [phase, setPhase] = useState<Phase>('speaking');
   const [errorMsg, setErrorMsg] = useState('');
   const [saving, setSaving] = useState(false);
+  const [autoListen, setAutoListen] = useState(true);
   const scrollRef = useRef<HTMLDivElement>(null);
   const started = useRef(false);
 
@@ -48,11 +49,14 @@ export default function ConversationScreen({
     if (started.current) return;
     started.current = true;
     (async () => {
-      const opening = buildOpeningLine(menu);
+      const base = buildOpeningLine(menu);
+      const opening = route.source === 'url'
+        ? `${base} Just a heads up — this menu is pulled from the website you shared, so it should be their most current version, but we can't guarantee every detail is accurate.`
+        : base;
       setTurns([{ role: 'assistant', text: opening }]);
       setPhase('speaking');
       await speak(opening, profile.ttsVoice);
-      setPhase('idle');
+      await startMic();
     })();
     return () => stopSpeaking();
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -65,8 +69,8 @@ export default function ConversationScreen({
     return () => clearTimeout(id);
   }, [turns]);
 
-  const beginListening = async () => {
-    if (phase !== 'idle') return;
+  // Start the mic unconditionally — called both manually and automatically after speaking.
+  const startMic = async () => {
     const ok = await requestMicPermission();
     if (!ok) {
       setErrorMsg('I need microphone access to hear you. Allow it and try again.');
@@ -82,6 +86,11 @@ export default function ConversationScreen({
       setErrorMsg('I could not start the microphone. Try again.');
       setPhase('error');
     }
+  };
+
+  const beginListening = async () => {
+    if (phase !== 'idle') return;
+    await startMic();
   };
 
   const finishListening = async () => {
@@ -102,7 +111,6 @@ export default function ConversationScreen({
       const userText = await transcribeAudio(blob);
       if (!userText) {
         await say("I didn't catch that. Could you say it again?");
-        setPhase('idle');
         return;
       }
 
@@ -113,7 +121,7 @@ export default function ConversationScreen({
         hadExchange &&
         EXIT_PHRASES.some((p) => t === p || t.startsWith(p + ' ') || t.endsWith(' ' + p));
       if (isExit) {
-        await say("Of course. I'll save what we talked about. Goodbye!");
+        await say("Of course. I'll save what we talked about. Goodbye!", undefined, false);
         finish();
         return;
       }
@@ -124,7 +132,6 @@ export default function ConversationScreen({
         const lastAssistant = [...turns].reverse().find((x) => x.role === 'assistant');
         if (lastAssistant) {
           await say(lastAssistant.text);
-          setPhase('idle');
           return;
         }
       }
@@ -135,7 +142,6 @@ export default function ConversationScreen({
       setPhase('thinking');
       const reply = await chatReply(menu, profile, history, userText);
       await say(reply, withUser);
-      setPhase('idle');
     } catch (e: any) {
       setErrorMsg(e?.message ?? "Something went wrong. Let's try that again.");
       setPhase('error');
@@ -143,11 +149,13 @@ export default function ConversationScreen({
   };
 
 
-  const say = async (text: string, baseHistory?: ChatTurn[]) => {
+  const say = async (text: string, baseHistory?: ChatTurn[], listen = autoListen) => {
     const base = baseHistory ?? turns;
     setTurns([...base, { role: 'assistant', text }]);
     setPhase('speaking');
     await speak(text, profile.ttsVoice);
+    if (listen) await startMic();
+    else setPhase('idle');
   };
 
   // Leaving the conversation: capture what they decided + their taste, then go home.
@@ -182,19 +190,9 @@ export default function ConversationScreen({
         role="status"
         aria-live="polite"
         aria-label={indicator.label}
-        style={{
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          gap: 10,
-          border: `2px solid ${indicator.color}`,
-          borderRadius: 'var(--r-md)',
-          padding: '16px',
-          color: indicator.color,
-          fontSize: 22,
-          fontWeight: 700,
-        }}
+        className={`phase-indicator phase-${phaseClass(phase)}`}
       >
+        <span className="phase-dot" aria-hidden="true" />
         {indicator.label}
       </div>
 
@@ -218,18 +216,12 @@ export default function ConversationScreen({
           <div
             key={i}
             aria-label={`${turn.role === 'assistant' ? 'MenuVoice' : 'You'} said: ${turn.text}`}
-            style={{
-              alignSelf: turn.role === 'assistant' ? 'flex-start' : 'flex-end',
-              maxWidth: '92%',
-              background: turn.role === 'assistant' ? 'var(--surface-high)' : 'var(--surface-user)',
-              borderRadius: 'var(--r-md)',
-              padding: '12px 14px',
-            }}
+            className={`turn turn-${turn.role}`}
           >
-            <div style={{ color: 'var(--text-muted)', fontSize: 13, fontWeight: 700, marginBottom: 4 }}>
+            <div className="turn-speaker">
               {turn.role === 'assistant' ? 'MenuVoice' : 'You'}
             </div>
-            <div style={{ fontSize: 18, lineHeight: 1.4 }}>{turn.text}</div>
+            <div className="turn-text">{turn.text}</div>
           </div>
         ))}
       </div>
@@ -263,7 +255,7 @@ export default function ConversationScreen({
           <SecondaryButton
             label="Skip"
             hint="Stop speaking and go to your turn"
-            onClick={() => { stopSpeaking(); setPhase('idle'); }}
+            onClick={() => { stopSpeaking(); if (autoListen) startMic(); else setPhase('idle'); }}
             style={{ minHeight: 70 }}
           />
         </div>
@@ -285,6 +277,21 @@ export default function ConversationScreen({
         />
       )}
 
+      <button
+        onClick={() => setAutoListen((v) => !v)}
+        aria-pressed={autoListen}
+        aria-label={`Conversational mode ${autoListen ? 'on' : 'off'}. Tap to turn ${autoListen ? 'off' : 'on'}.`}
+        className="btn"
+        style={{
+          minHeight: 64,
+          border: `2px solid ${autoListen ? 'var(--accent)' : 'var(--border)'}`,
+          background: autoListen ? 'var(--surface-high)' : 'var(--surface)',
+          color: autoListen ? 'var(--accent)' : 'var(--text-secondary)',
+        }}
+      >
+        {autoListen ? '⦿ Conversational: ON' : '○ Conversational: OFF'}
+      </button>
+
       <SecondaryButton
         label={saving ? 'Saving your preferences…' : 'Done'}
         hint="Save what you decided and return home"
@@ -300,19 +307,24 @@ export default function ConversationScreen({
   );
 }
 
-function indicatorFor(phase: Phase): { label: string; color: string } {
+function indicatorFor(phase: Phase): { label: string } {
   switch (phase) {
-    case 'speaking':
-      return { label: 'MenuVoice is speaking…', color: 'var(--accent)' };
-    case 'idle':
-      return { label: 'Your turn — tap to talk', color: 'var(--success)' };
-    case 'recording':
-      return { label: 'Listening… tap Done when finished', color: 'var(--success)' };
+    case 'speaking':     return { label: 'MenuVoice is speaking…' };
+    case 'idle':         return { label: 'Your turn — tap to talk' };
+    case 'recording':    return { label: 'Listening… tap Done when finished' };
+    case 'transcribing': return { label: 'Hearing you…' };
+    case 'thinking':     return { label: 'Thinking…' };
+    case 'error':        return { label: 'Something needs your attention' };
+  }
+}
+
+function phaseClass(phase: Phase): string {
+  switch (phase) {
+    case 'speaking':     return 'speaking';
+    case 'idle':         return 'idle';
+    case 'recording':    return 'recording';
     case 'transcribing':
-      return { label: 'Hearing you…', color: 'var(--text-secondary)' };
-    case 'thinking':
-      return { label: 'Thinking…', color: 'var(--text-secondary)' };
-    case 'error':
-      return { label: 'Something needs your attention', color: 'var(--danger)' };
+    case 'thinking':     return 'processing';
+    case 'error':        return 'error';
   }
 }

@@ -40,9 +40,9 @@ export default function UrlScreen({ navigate, goBack }: ScreenProps) {
       const menu = await parseMenuFromUrl(fullUrl);
       const restaurantName = menu.restaurantName?.trim() || 'This restaurant';
       await saveRestaurant(restaurantName, menu).catch(() => {});
-      navigate({ name: 'conversation', menu, restaurantName });
+      navigate({ name: 'conversation', menu, restaurantName, source: 'url' });
     } catch (e: any) {
-      announce(e?.message ?? 'Could not read the menu from that website. Try a different URL.');
+      announce(e?.message ?? "Hey, sorry — I couldn't read the menu from that website. Try a different link.");
       setLoading(false);
     }
   };

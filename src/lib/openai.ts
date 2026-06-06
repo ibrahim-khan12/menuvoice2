@@ -9,10 +9,10 @@
 import { ParsedMenu, UserProfile, ChatTurn } from '../types';
 
 const DIRECT_KEY = import.meta.env.VITE_OPENAI_API_KEY ?? '';
-const VISION_MODEL = import.meta.env.VITE_VISION_MODEL ?? 'gpt-4o-mini';
-const CHAT_MODEL = import.meta.env.VITE_CHAT_MODEL ?? 'gpt-4o-mini';
-const TTS_MODEL = import.meta.env.VITE_TTS_MODEL ?? 'tts-1-hd';
-const TTS_VOICE_DEFAULT = import.meta.env.VITE_TTS_VOICE ?? 'shimmer';
+const VISION_MODEL = 'gpt-5.4-mini';
+const CHAT_MODEL = 'gpt-5.4-mini';
+const TTS_MODEL = 'tts-1-hd';
+const TTS_VOICE_DEFAULT = 'shimmer';
 
 // True when the direct browser→OpenAI path is available (local dev only).
 const DIRECT = DIRECT_KEY.startsWith('sk-') && DIRECT_KEY.length > 20;
@@ -104,7 +104,6 @@ export async function parseMenuFromImages(imagesBase64: string[]): Promise<Parse
     model: VISION_MODEL,
     messages: [{ role: 'user', content }],
     response_format: { type: 'json_object' },
-    temperature: 0.1,
   });
 
   const raw = json.choices?.[0]?.message?.content ?? '{}';
@@ -189,7 +188,7 @@ export async function chatReply(
   for (const t of pruneHistory(history)) messages.push({ role: t.role, content: t.text });
   messages.push({ role: 'user', content: userText });
 
-  const json = await chatCompletions({ model: CHAT_MODEL, messages, temperature: 0.5, max_tokens: 220 });
+  const json = await chatCompletions({ model: CHAT_MODEL, messages, max_completion_tokens: 220 });
   return (json.choices?.[0]?.message?.content ?? "Sorry, I missed that. Could you say it again?").trim();
 }
 
@@ -209,7 +208,6 @@ export async function extractSessionLearnings(turns: ChatTurn[]): Promise<Sessio
   try {
     const json = await chatCompletions({
       model: CHAT_MODEL,
-      temperature: 0,
       response_format: { type: 'json_object' },
       messages: [
         {
@@ -244,29 +242,43 @@ export async function parseMenuFromUrl(url: string): Promise<ParsedMenu> {
   });
   if (!scrapeRes.ok) {
     const err = await scrapeRes.json().catch(() => ({}));
-    throw new Error((err as any).error ?? `Could not fetch that website (${scrapeRes.status}).`);
+    throw new Error((err as any).error ?? "Hey, sorry — I couldn't reach that website. Double-check the link and try again.");
   }
-  const { text } = (await scrapeRes.json()) as { text: string };
-  if (!text?.trim()) throw new Error('That page appears to be empty. Try the direct menu URL.');
+
+  const data = (await scrapeRes.json()) as { text?: string; imageUrl?: string };
+
+  let content: any;
+  if (data.imageUrl) {
+    content = [
+      {
+        type: 'text',
+        text:
+          'You are reading an image of a restaurant menu. Extract every item you can see. ' +
+          'Group items into natural sections (appetizers, mains, desserts, drinks, specials, etc.). ' +
+          'For each item include: name, description (if shown), price (as written, with currency symbol), ' +
+          'and a best-effort ingredients list. Extract the restaurant name if visible. ' +
+          'Respond ONLY with JSON: {"restaurantName":string|null,"categories":[{"name":string,"items":[{"name":string,"description":string,"price":string,"ingredients":string[]}]}],"notes":string}',
+      },
+      { type: 'image_url', image_url: { url: data.imageUrl, detail: 'high' } },
+    ];
+  } else {
+    const text = data.text;
+    if (!text?.trim()) throw new Error("Hey, sorry — that page looks empty to me. Try linking directly to their menu page, like adding /menu to the address.");
+    content =
+      'You are reading text scraped from a restaurant website. Extract every menu item visible. ' +
+      'Group items into natural sections (appetizers, mains, desserts, drinks, specials, etc.). ' +
+      'For each item include: name, description (if shown), price (as written, with currency symbol), ' +
+      'and a best-effort ingredients list inferred from the name and description. ' +
+      'Extract the restaurant name if visible. ' +
+      'If no menu items are found, set categories to an empty array. ' +
+      'Respond ONLY with JSON: {"restaurantName":string|null,"categories":[{"name":string,"items":[{"name":string,"description":string,"price":string,"ingredients":string[]}]}],"notes":string}\n\n' +
+      'WEBSITE TEXT:\n' + text;
+  }
 
   const json = await chatCompletions({
     model: VISION_MODEL,
-    messages: [
-      {
-        role: 'user',
-        content:
-          'You are reading text scraped from a restaurant website. Extract every menu item visible. ' +
-          'Group items into natural sections (appetizers, mains, desserts, drinks, specials, etc.). ' +
-          'For each item include: name, description (if shown), price (as written, with currency symbol), ' +
-          'and a best-effort ingredients list inferred from the name and description. ' +
-          'Extract the restaurant name if visible. ' +
-          'If no menu items are found, set categories to an empty array. ' +
-          'Respond ONLY with JSON: {"restaurantName":string|null,"categories":[{"name":string,"items":[{"name":string,"description":string,"price":string,"ingredients":string[]}]}],"notes":string}\n\n' +
-          'WEBSITE TEXT:\n' + text,
-      },
-    ],
+    messages: [{ role: 'user', content }],
     response_format: { type: 'json_object' },
-    temperature: 0.1,
   });
 
   const raw = json.choices?.[0]?.message?.content ?? '{}';
@@ -274,11 +286,11 @@ export async function parseMenuFromUrl(url: string): Promise<ParsedMenu> {
   try {
     parsed = JSON.parse(raw);
   } catch {
-    throw new Error('The menu reader returned something unexpected. Try a different URL.');
+    throw new Error("Hey, sorry — something went wrong reading that menu. Try a different link.");
   }
   if (!parsed.categories || parsed.categories.length === 0) {
     throw new Error(
-      'I could not find menu items on that page. Try linking directly to the menu page (e.g. /menu or /food).'
+      "Hey, sorry — I couldn't find any menu items on that page. It might be the homepage rather than the menu itself. Try adding /menu to the address, or find a link that goes directly to their food menu."
     );
   }
   return parsed;
