@@ -15,9 +15,8 @@ import { ScreenProps, Route } from '../nav';
 import { ChatTurn } from '../types';
 import { useProfile } from '../state/ProfileContext';
 import { speak, stopSpeaking } from '../lib/speech';
-import { startRecording, stopRecording, requestMicPermission, getActiveStream } from '../lib/recorder';
-import { watchForSilence, SilenceWatcher } from '../lib/vad';
-import { buildOpeningLine, transcribeAudio, chatReply, extractSessionLearnings, hasApiKey } from '../lib/openai';
+import { SpeechManager, isSpeechRecognitionSupported } from '../lib/speechRecognition';
+import { buildOpeningLine, chatReply, extractSessionLearnings, hasApiKey } from '../lib/openai';
 import { earconStart, earconStop, earconError } from '../lib/earcon';
 import { mergeUnique } from '../util';
 
@@ -45,9 +44,9 @@ export default function ConversationScreen({
   const [autoListen, setAutoListen] = useState(true);
   const scrollRef = useRef<HTMLDivElement>(null);
   const started = useRef(false);
-  const silenceRef = useRef<SilenceWatcher | null>(null);
-  // Always points to the latest finishListening — avoids stale-closure capture inside the watcher.
-  const finishListeningRef = useRef<() => Promise<void>>(async () => {});
+  const speechManagerRef = useRef<SpeechManager | null>(null);
+  // Always points to the latest processUtterance so the SpeechManager callback never goes stale.
+  const processUtteranceRef = useRef<(text: string) => Promise<void>>(async () => {});
 
   useEffect(() => {
     if (started.current) return;
@@ -64,8 +63,8 @@ export default function ConversationScreen({
     })();
     return () => {
       stopSpeaking();
-      silenceRef.current?.cancel();
-      silenceRef.current = null;
+      speechManagerRef.current?.destroy();
+      speechManagerRef.current = null;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -77,37 +76,45 @@ export default function ConversationScreen({
     return () => clearTimeout(id);
   }, [turns]);
 
-  // Start the mic unconditionally — called both manually and automatically after speaking.
+  // Start listening — called both manually and automatically after speaking.
+  // Uses Web Speech API (webkitSpeechRecognition) instead of MediaRecorder + VAD.
+  // The browser's native silence detection submits the transcript after 2s of quiet.
   const startMic = async () => {
-    const ok = await requestMicPermission();
-    if (!ok) {
-      const msg = 'I need microphone access to hear you. Please allow microphone access, then tap Try again.';
-      setErrorMsg(msg);
-      setPhase('error');
-      await speak(msg, profile.ttsVoice); // blind users can't see the error text
-      return;
-    }
-    try {
-      // Earcon BEFORE recording starts so the beep isn't captured into the clip,
-      // and so the guest hears "your turn" the instant the mic opens.
-      earconStart();
-      await startRecording();
-      setPhase('recording');
-      const s = getActiveStream();
-      if (s) {
-        silenceRef.current?.cancel();
-        silenceRef.current = watchForSilence(s, 8000, 90000, () => {
-          silenceRef.current = null;
-          finishListeningRef.current();
-        });
-      }
-    } catch {
-      earconError();
-      const msg = 'I could not start the microphone. Tap Try again.';
+    if (!isSpeechRecognitionSupported()) {
+      const msg = 'Voice input is not supported in this browser. Try Chrome or Safari.';
       setErrorMsg(msg);
       setPhase('error');
       await speak(msg, profile.ttsVoice);
+      return;
     }
+
+    // Fresh SpeechManager each turn — iOS accumulates transcripts across sessions
+    // if you reuse the same recognition instance, causing doubled/garbled results.
+    speechManagerRef.current?.destroy();
+    speechManagerRef.current = new SpeechManager(
+      // onTranscript: browser silence detection fired — user finished speaking
+      (userText: string) => {
+        earconStop();
+        try { navigator.vibrate?.([80]); } catch {} // single pulse = mic closed
+        processUtteranceRef.current(userText);
+      },
+      // onError: permission denied or capture failure
+      async (msg: string) => {
+        earconError();
+        setErrorMsg(msg);
+        setPhase('error');
+        await speak(msg, profile.ttsVoice);
+      },
+    );
+
+    earconStart();
+    // Vibrate to signal mic is open — essential for blind users who can't see the indicator.
+    try { navigator.vibrate?.([30, 40, 30]); } catch {}
+    // 150ms gap: lets iOS audio system settle after TTS so recognition doesn't
+    // capture the tail of the app's own speech as the user's first words.
+    await new Promise<void>((r) => setTimeout(r, 150));
+    speechManagerRef.current.start();
+    setPhase('recording');
   };
 
   const beginListening = async () => {
@@ -115,55 +122,45 @@ export default function ConversationScreen({
     await startMic();
   };
 
-  const finishListening = async () => {
-    if (phase !== 'recording') return;
-    silenceRef.current?.cancel();
-    silenceRef.current = null;
-    earconStop();
+  // Called by SpeechManager once the user has finished speaking (2s silence).
+  // Also called directly when user taps "Done talking" (via submitNow).
+  const processUtterance = async (userText: string) => {
     setPhase('transcribing');
-    let blob: Blob | null = null;
-    try {
-      blob = await stopRecording();
-    } catch {
-      blob = null;
-    }
-    if (!blob) {
-      setPhase('idle');
+
+    if (!userText.trim()) {
+      await say("I didn't catch that. Could you say it again?");
       return;
     }
+
+    const t = userText.toLowerCase().trim();
+    const hadExchange = turns.some((x) => x.role === 'user');
+
+    // Intercept clear exit phrases so they don't go to the menu LLM.
+    const isExit =
+      hadExchange &&
+      EXIT_PHRASES.some((p) => t === p || t.startsWith(p + ' ') || t.endsWith(' ' + p));
+    if (isExit) {
+      await say("Of course. I'll save what we talked about. Goodbye!", undefined, false);
+      finish();
+      return;
+    }
+
+    // "Repeat that" — replay last assistant message without hitting the LLM.
+    const isRepeat = REPEAT_PHRASES.some((p) => t.includes(p));
+    if (isRepeat) {
+      const lastAssistant = [...turns].reverse().find((x) => x.role === 'assistant');
+      if (lastAssistant) {
+        await say(lastAssistant.text);
+        return;
+      }
+    }
+
+    const history = turns;
+    const withUser: ChatTurn[] = [...history, { role: 'user', text: userText }];
+    setTurns(withUser);
+    setPhase('thinking');
+
     try {
-      const userText = await transcribeAudio(blob);
-      if (!userText) {
-        await say("I didn't catch that. Could you say it again?");
-        return;
-      }
-
-      // Intercept clear navigation/exit commands so they don't go to the menu LLM.
-      const t = userText.toLowerCase().trim();
-      const hadExchange = turns.some((x) => x.role === 'user');
-      const isExit =
-        hadExchange &&
-        EXIT_PHRASES.some((p) => t === p || t.startsWith(p + ' ') || t.endsWith(' ' + p));
-      if (isExit) {
-        await say("Of course. I'll save what we talked about. Goodbye!", undefined, false);
-        finish();
-        return;
-      }
-
-      // "Repeat that" — replay last assistant message without hitting the LLM.
-      const isRepeat = REPEAT_PHRASES.some((p) => t.includes(p));
-      if (isRepeat) {
-        const lastAssistant = [...turns].reverse().find((x) => x.role === 'assistant');
-        if (lastAssistant) {
-          await say(lastAssistant.text);
-          return;
-        }
-      }
-
-      const history = turns;
-      const withUser: ChatTurn[] = [...history, { role: 'user', text: userText }];
-      setTurns(withUser);
-      setPhase('thinking');
       const reply = await chatReply(menu, profile, history, userText);
       await say(reply, withUser);
     } catch (e: any) {
@@ -174,7 +171,8 @@ export default function ConversationScreen({
     }
   };
 
-  finishListeningRef.current = finishListening;
+  // Keep the ref in sync every render so the SpeechManager callback never closes over stale state.
+  processUtteranceRef.current = processUtterance;
 
   const say = async (text: string, baseHistory?: ChatTurn[], listen = autoListen) => {
     const base = baseHistory ?? turns;
@@ -287,23 +285,32 @@ export default function ConversationScreen({
           />
         </div>
       ) : phase === 'recording' ? (
-        <div
-          aria-hidden="true"
-          style={{
-            minHeight: 110,
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            borderRadius: 'var(--r-md)',
-            border: '2px solid var(--success)',
-            background: 'rgba(109, 214, 138, 0.12)',
-            color: 'var(--success)',
-            fontWeight: 700,
-            fontSize: 20,
-            letterSpacing: '-0.01em',
-          }}
-        >
-          Listening…
+        <div className="col" style={{ gap: 8 }}>
+          <div
+            role="status"
+            aria-live="polite"
+            style={{
+              minHeight: 70,
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              borderRadius: 'var(--r-md)',
+              border: '2px solid var(--success)',
+              background: 'rgba(109, 214, 138, 0.12)',
+              color: 'var(--success)',
+              fontWeight: 700,
+              fontSize: 20,
+              letterSpacing: '-0.01em',
+            }}
+          >
+            Listening… speak now
+          </div>
+          <SecondaryButton
+            label="Done talking"
+            hint="Submit what you just said without waiting"
+            onClick={() => speechManagerRef.current?.submitNow()}
+            style={{ minHeight: 64 }}
+          />
         </div>
       ) : (
         <PrimaryButton

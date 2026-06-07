@@ -94,13 +94,18 @@ export function stopCoach() {
   } catch {}
 }
 
+// Keep a window-level reference to prevent iOS Safari from GC'ing the utterance
+// mid-speech (which causes onend to never fire, hanging speak() forever).
+const _win = window as Window & { _mvUtterance?: SpeechSynthesisUtterance };
+
 function speakWithBrowser(text: string): Promise<void> {
   return new Promise<void>((resolve) => {
     if (!('speechSynthesis' in window)) return resolve();
     const u = new SpeechSynthesisUtterance(text);
     u.rate = 1.0;
-    u.onend = () => resolve();
-    u.onerror = () => resolve();
+    _win._mvUtterance = u; // prevent iOS GC
+    u.onend = () => { _win._mvUtterance = undefined; resolve(); };
+    u.onerror = () => { _win._mvUtterance = undefined; resolve(); };
     window.speechSynthesis.speak(u);
   });
 }
