@@ -1,10 +1,19 @@
 // Shared accessible web UI primitives. Buttons/inputs are >= 64px,
 // have roles/labels, and a visible focus ring (see index.css :focus-visible).
 
-import React from 'react';
+import React, { useEffect, useRef } from 'react';
 
 export function Screen({ children }: { children: React.ReactNode }) {
-  return <main className="screen">{children}</main>;
+  const ref = useRef<HTMLElement>(null);
+  useEffect(() => {
+    // Move focus to screen top on every mount so keyboard/SR users land at content
+    ref.current?.focus();
+  }, []);
+  return (
+    <main id="main-content" className="screen" tabIndex={-1} ref={ref}>
+      {children}
+    </main>
+  );
 }
 
 export function Title({ children }: { children: React.ReactNode }) {

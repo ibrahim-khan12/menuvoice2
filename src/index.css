@@ -66,6 +66,25 @@ body {
   flex-direction: column;
 }
 
+/* ── Skip navigation link ────────────────────────── */
+.skip-link {
+  position: absolute;
+  top: -44px;
+  left: 12px;
+  padding: 10px 18px;
+  background: var(--accent);
+  color: var(--accent-text);
+  font-size: 16px;
+  font-weight: 700;
+  border-radius: 0 0 var(--r-sm) var(--r-sm);
+  z-index: 9999;
+  transition: top 120ms ease;
+  text-decoration: none;
+}
+.skip-link:focus {
+  top: 0;
+}
+
 /* ── Focus ──────────────────────────────────────── */
 :focus-visible {
   outline: 3px solid var(--focus);
@@ -274,6 +293,12 @@ body {
 
 .input:focus {
   outline: none;
+  border-color: var(--accent);
+}
+
+.input:focus-visible {
+  outline: 3px solid var(--focus);
+  outline-offset: 0;
   border-color: var(--accent);
 }
 
@@ -518,7 +543,8 @@ body {
   .btn,
   .btn-icon,
   .btn-ghost,
-  .input {
+  .input,
+  .skip-link {
     transition: none;
   }
 }
