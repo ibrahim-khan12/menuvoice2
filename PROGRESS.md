@@ -36,6 +36,18 @@ the "LEFT OFF" line at the bottom says exactly where.
   `vercel env pull` before local server testing. Production unaffected.
 - `npm run build` green; api/*.ts type-check clean.
 
+### Production smoke tests (after deploy, 2026-06-11 ~23:35)
+- Hit ERR_MODULE_NOT_FOUND on first deploy: ESM runtime needs explicit `.js`
+  extension on the `./_menuCore` import. Fixed in 6a2c4e9. Lesson recorded.
+- POST /api/find-menu {"query":"Chipotle Mexican Grill"} → 200 in 11s, full menu
+  with descriptions + ingredients, via stage-1 web search. ✔
+- POST /api/menu-from-url with Chipotle's PDF menu → 200 in 13s, structured menu
+  parsed from the PDF (proves fetchMenuSource + parseMenuSource, the same code
+  stage 2 uses). ✔
+- JS-shell pages (e.g. mcalistersdeli.com/menu) return the friendly 422 fast —
+  Browserless fallback appears inactive (token may be exhausted). Find-by-name
+  covers those restaurants via web search instead.
+
 ### Known follow-ups (not blocking the prototype)
 - `api/scrape.ts` is now unused by the client (replaced by menu-from-url). Kept
   for backward compat; delete once confirmed nothing else calls it.
@@ -44,5 +56,7 @@ the "LEFT OFF" line at the bottom says exactly where.
 - Scanner thresholds (LUM_DARK, SHARP_MIN, EDGE_MIN in scanner.ts) tuned on
   theory; adjust after a real-device test in restaurant lighting.
 
-LEFT OFF: committing + pushing to main (GitHub auto-deploys to Vercel:
-https://menuvoice-sigma.vercel.app).
+LEFT OFF: all five improvements shipped, deployed, and smoke-tested in
+production (https://menuvoice-sigma.vercel.app). Next session: real-device test
+of the new scanner in restaurant lighting, then tune scanner.ts thresholds; check
+whether BROWSERLESS_TOKEN needs renewing for JS-heavy menu sites.

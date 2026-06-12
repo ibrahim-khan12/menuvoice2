@@ -35,6 +35,14 @@ Every meaningful action in a session writes a row to the `events` table:
 | Cloud sync push / pull | sync | push, pull |
 | Storage quota exceeded | error | storage_quota |
 | Camera permission denied | error | camera |
+| Scanner guidance state change | capture | guidance |
+| Scanner gives up → manual mode | capture | scanner_struggle |
+| Find-by-name search submitted | find | search_start |
+| Find-by-name result (pass/fail) | menu | find_by_name |
+| Website URL submitted | url | submit |
+| Saved restaurant opened | saved | open |
+| Saved restaurant deleted | saved | delete |
+| Voice/browse mode toggled | conversation | mode_toggle |
 
 Every row also carries: `user_email`, `session_id`, `screen`, `client_ts`, `outcome` (success/failure), `duration_ms`, `app_version`, `user_agent`.
 
