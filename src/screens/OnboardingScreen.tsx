@@ -17,8 +17,8 @@ import { cleanName, parseList } from '../util';
 type Step = 'intro' | 'name' | 'allergies';
 
 const INTRO =
-  'Welcome to MenuVoice. Point your camera at any menu, search a restaurant by name, or paste a link — ' +
-  'and I will read it aloud and help you decide what to order. ' +
+  'Welcome to MenuVoice. Point your camera at any menu, search a restaurant by name, or paste a link. ' +
+  'I will read it aloud and help you decide what to order. ' +
   'Two quick questions to get started.';
 
 export default function OnboardingScreen() {
@@ -72,7 +72,7 @@ export default function OnboardingScreen() {
           <PrimaryButton
             label="Let's begin"
             onClick={() => setStep('name')}
-            hint="Starts setup — app will speak from here"
+            hint="Starts setup. App will speak from here"
             style={{ minHeight: 96, marginTop: 32 }}
           />
         </>
@@ -81,7 +81,7 @@ export default function OnboardingScreen() {
       {step === 'name' && (
         <VoiceStep
           question="What should I call you?"
-          help="Tap the button and say your first name — or type it below."
+          help="Tap the button and say your first name, or type it below."
           placeholder="First name"
           value={name}
           onChange={setName}
@@ -188,7 +188,7 @@ function VoiceStep({
         value={value}
         onChange={(e) => onChange(e.target.value)}
         placeholder={placeholder}
-        aria-label={`${question} — or type here`}
+        aria-label={`${question}. Or type here`}
         onKeyDown={(e) => {
           if (e.key === 'Enter') onNext();
         }}

@@ -44,7 +44,7 @@ export default function UrlScreen({ navigate, goBack }: ScreenProps) {
       await saveRestaurant(restaurantName, menu).catch(() => {});
       navigate({ name: 'conversation', menu, restaurantName, source: 'url' });
     } catch (e: any) {
-      announce(e?.message ?? "Hey, sorry — I couldn't read the menu from that website. Try a different link.");
+      announce(e?.message ?? "Hey, sorry. I couldn't read the menu from that website. Try a different link.");
       setLoading(false);
     }
   };
@@ -53,7 +53,7 @@ export default function UrlScreen({ navigate, goBack }: ScreenProps) {
     <Screen>
       <Title>Menu from website</Title>
       <Body>
-        Paste any link from the restaurant — their homepage, menu page, or even a PDF menu —
+        Paste any link from the restaurant (homepage, menu page, or even a PDF menu)
         and I will read it for you. If you only know the restaurant's name, use Find a
         Restaurant on the home screen instead.
       </Body>

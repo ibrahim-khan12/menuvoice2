@@ -9,7 +9,7 @@ import { useProfile } from '../state/ProfileContext';
 import { splitList } from '../util';
 import { startRecording, stopRecording, requestMicPermission, getActiveStream } from '../lib/recorder';
 import { transcribeAudio } from '../lib/openai';
-import { speak } from '../lib/speech';
+import { speak, setAppVoice } from '../lib/speech';
 import { watchForSilence } from '../lib/vad';
 import { track } from '../lib/telemetry';
 
@@ -124,7 +124,7 @@ export default function SettingsScreen({ goBack, navigate }: ScreenProps) {
           onBlur={() => saveName(nameVal)}
           onKeyDown={(e) => { if (e.key === 'Enter') saveName(nameVal); }}
           placeholder="First name"
-          aria-label="Your name — tap mic to speak it"
+          aria-label="Your name. Tap mic to speak it"
           style={{ flex: 1, margin: 0 }}
         />
         <button
@@ -214,7 +214,7 @@ export default function SettingsScreen({ goBack, navigate }: ScreenProps) {
             }
           }}
           placeholder="Add a dislike (e.g. mushrooms)"
-          aria-label="Add a dislike — tap mic to speak it"
+          aria-label="Add a dislike. Tap mic to speak it"
           style={{ flex: 1, margin: 0 }}
         />
         <button
@@ -241,6 +241,29 @@ export default function SettingsScreen({ goBack, navigate }: ScreenProps) {
         style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', cursor: 'pointer', gap: 16 }}
       >
         <div>
+          <span style={{ fontSize: 18 }}>App voice</span>
+          <p style={{ fontSize: 14, color: 'var(--text-secondary)', margin: '4px 0 0' }}>
+            Turn off if you use VoiceOver and the app voice talks over it.
+          </p>
+        </div>
+        <input
+          type="checkbox"
+          checked={profile.appVoice !== false}
+          onChange={(e) => {
+            const on = e.target.checked;
+            setAppVoice(on);
+            update({ appVoice: on });
+          }}
+          aria-label="App voice. Turn off if you use VoiceOver and the app voice talks over it"
+          style={{ width: 28, height: 28, flexShrink: 0 }}
+        />
+      </label>
+
+      <label
+        className="card"
+        style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', cursor: 'pointer', gap: 16 }}
+      >
+        <div>
           <span style={{ fontSize: 18 }}>Save menu photos for analysis</span>
           <p style={{ fontSize: 14, color: 'var(--text-secondary)', margin: '4px 0 0' }}>
             When on, captured photos are uploaded so you can review them later.
@@ -250,7 +273,7 @@ export default function SettingsScreen({ goBack, navigate }: ScreenProps) {
           type="checkbox"
           checked={!!profile.imageLogging}
           onChange={(e) => update({ imageLogging: e.target.checked })}
-          aria-label="Save menu photos for analysis — when on, captured photos are uploaded for later review"
+          aria-label="Save menu photos for analysis. When on, captured photos are uploaded for later review"
           style={{ width: 28, height: 28, flexShrink: 0 }}
         />
       </label>

@@ -94,7 +94,23 @@ the "LEFT OFF" line at the bottom says exactly where.
   matrix (agent may still be writing).
 - REVIEW.md — code review of the last 3 commits (agent may still be writing).
 
-LEFT OFF (2026-06-12): incomplete-menu flow + VoiceOver fixes built and
-committed. Next: implement VOICEOVER-AUDIT P0 #1 (global app-voice setting),
-read SMOKE-RESULTS.md / REVIEW.md and fix what they surface, real-device
-scanner test in restaurant lighting, check BROWSERLESS_TOKEN.
+### Tier 1 fixes from REVIEW.md (2026-06-12, second session, commit f0f725d)
+- [x] SSRF guard (REVIEW.md CRITICAL): api/_menuCore.ts assertPublicUrl()
+      rejects non-http(s) schemes and localhost/private/link-local/metadata
+      hosts before fetchOne(), and re-checks response.url after redirects.
+- [x] FindScreen re-entrancy (REVIEW.md major): inFlightRef guard stops
+      parallel find() calls / orphaned reassurance intervals.
+- [x] Telemetry batch wedging (REVIEW.md major): flush() caps body at 60 KB
+      (keepalive/sendBeacon reject >64 KiB); oversized batches split in half
+      back onto the queue, a single never-sendable poison event is dropped.
+- [in progress] VOICEOVER-AUDIT P0 #1 global app-voice toggle: sub-agent
+      adding appVoice to profile, gating speak()/coach() in src/lib/speech.ts,
+      Settings toggle. If not committed, check git status for its edits.
+
+LEFT OFF (2026-06-12 second session): three REVIEW.md Tier-1 fixes committed
+(f0f725d) and build green. Sub-agent was finishing the app-voice toggle at the
+4:41 PM hard stop — verify speech.ts/SettingsScreen.tsx edits, run npm run
+build, commit, push. Then: REVIEW.md remaining majors (LLM category validation
+in find-menu.ts, iOS coach utterance drop in speech.ts), SMOKE-RESULTS.md
+chain-restaurant 404s (check BROWSERLESS_TOKEN), VOICEOVER-AUDIT P1s, push to
+deploy.

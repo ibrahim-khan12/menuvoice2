@@ -94,7 +94,7 @@ export async function parseMenuFromImages(imagesBase64: string[]): Promise<Parse
         'and a best-effort ingredients list inferred from the name and description. ' +
         'Also extract the restaurant name if it is visible on the menu (e.g. on the header or cover). ' +
         'If a photo is unreadable, note it. ' +
-        'Set "incomplete" to true if these photos clearly show only PART of the menu — text cut off at ' +
+        'Set "incomplete" to true if these photos clearly show only PART of the menu. Text cut off at ' +
         'an edge, sections referenced but not pictured, or unreadable areas. Set it to false if the menu appears whole. ' +
         'Respond ONLY with JSON matching this shape: ' +
         '{"restaurantName":string|null,"categories":[{"name":string,"items":[{"name":string,"description":string,"price":string,"ingredients":string[]}]}],"notes":string,"incomplete":boolean}',
@@ -145,16 +145,16 @@ function buildSystemPrompt(menu: ParsedMenu, profile: UserProfile): string {
     `You are MenuVoice, a warm, calm voice assistant helping ${profile.name || 'a guest'} who is blind or low-vision navigate a restaurant menu by voice.`,
     '',
     'HARD RULES:',
-    `- The guest has these ALLERGIES: ${allergies}. Before describing, recommending, or discussing ANY item that contains (or likely contains) one of these allergens, you MUST flag it first, e.g. "Heads up — this contains shellfish, which is one of your allergies. Want me to continue?"`,
+    `- The guest has these ALLERGIES: ${allergies}. Before describing, recommending, or discussing ANY item that contains (or likely contains) one of these allergens, you MUST flag it first, e.g. "Heads up. This contains shellfish, which is one of your allergies. Want me to continue?"`,
     `- The guest dislikes: ${dislikes}. Spice tolerance: ${profile.spiceTolerance}. Cuisines they like: ${cuisines}.`,
     `- Dishes ${profile.name || 'the guest'} has chosen/enjoyed before: ${orders}. When it fits naturally, use these to make recommendations (e.g. "last time you went for the ${profile.pastOrders[0] ?? 'salmon'}, so you might like..."). Don't force it.`,
     profile.hidePrices
       ? '- The guest has hidden prices. Do NOT say prices unless they explicitly ask.'
       : '- Say prices when relevant.',
-    '- Keep answers short and conversational — this is spoken aloud. 1-3 sentences unless they ask for detail. No markdown, no bullet symbols, no emoji.',
+    '- Keep answers short and conversational. This is spoken aloud. 1-3 sentences unless they ask for detail. No markdown, no bullet symbols, no emoji.',
     '- Never invent items that are not on the menu. If unsure, say so.',
     menu.incomplete
-      ? '- This menu capture is INCOMPLETE — some items or sections are missing. If asked about something not listed, say it may be on a part of the menu that was not captured, and suggest adding more photos.'
+      ? '- This menu capture is INCOMPLETE. Some items or sections are missing. If asked about something not listed, say it may be on a part of the menu that was not captured, and suggest adding more photos.'
       : '',
     '- End most turns with a brief, natural question that keeps the conversation moving.',
     '',
@@ -345,7 +345,7 @@ export async function parseMenuFromUrl(url: string): Promise<ParsedMenu> {
   });
   if (!res.ok) {
     const err = await res.json().catch(() => ({}));
-    const msg = (err as any).error ?? "Hey, sorry — I couldn't read the menu from that website. Double-check the link and try again.";
+    const msg = (err as any).error ?? "Hey, sorry. I couldn't read the menu from that website. Double-check the link and try again.";
     track('menu', 'parse_url', { outcome: 'failure', durationMs: Date.now() - t0, metadata: { url, status: res.status } });
     throw new Error(msg);
   }
@@ -415,6 +415,6 @@ async function parseApiError(res: Response): Promise<string> {
   if (res.status === 429) return 'Rate limit reached. Wait a moment and try again.';
   if (res.status === 500 && body.includes('No API key')) return 'No API key configured on the server.';
   if (res.status === 504 || res.status === 524 || res.status === 408)
-    return 'The request timed out. The menu might be complex — try again.';
+    return 'The request timed out. The menu might be complex. Try again.';
   return `API error (${res.status}). Check your server configuration.`;
 }

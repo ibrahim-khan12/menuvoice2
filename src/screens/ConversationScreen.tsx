@@ -56,7 +56,7 @@ function MenuDocument({
   headingRef?: React.RefObject<HTMLHeadingElement>;
 }) {
   return (
-    <section aria-label="Full menu — browse with VoiceOver heading rotor" style={{ marginTop: 24 }}>
+    <section aria-label="Full menu. Browse with VoiceOver heading rotor" style={{ marginTop: 24 }}>
       <h2
         ref={headingRef}
         tabIndex={-1}
@@ -69,7 +69,7 @@ function MenuDocument({
           <h2 className="browse-category">
             {cat.name}
             <span style={{ fontWeight: 400, fontSize: '0.7em' }}>
-              {' '}— {cat.items.length} item{cat.items.length === 1 ? '' : 's'}
+              {' '}({cat.items.length} item{cat.items.length === 1 ? '' : 's'})
             </span>
           </h2>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginTop: 10, marginBottom: 24 }}>
@@ -141,7 +141,7 @@ export default function ConversationScreen({
       const base = buildOpeningLine(menu);
       const opening =
         route.source === 'url'
-          ? `${base} Just a heads up — this menu is from the website you shared, so it should be their current version, but details may vary.`
+          ? `${base} Just a heads up. This menu is from the website you shared, so it should be their current version, but details may vary.`
           : base;
       setTurns([{ role: 'assistant', text: opening }]);
       setLatestAssistant(opening);
@@ -534,8 +534,8 @@ export default function ConversationScreen({
 function indicatorFor(phase: Phase): { label: string } {
   switch (phase) {
     case 'speaking':     return { label: 'MenuVoice is speaking…' };
-    case 'idle':         return { label: 'Your turn — tap to talk' };
-    case 'recording':    return { label: 'Listening — tap when you\'re done' };
+    case 'idle':         return { label: 'Your turn. Tap to talk' };
+    case 'recording':    return { label: 'Listening. Tap when you\'re done' };
     case 'transcribing': return { label: 'Hearing you…' };
     case 'thinking':     return { label: 'Thinking…' };
     case 'error':        return { label: 'Something needs your attention' };
