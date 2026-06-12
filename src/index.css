@@ -409,15 +409,6 @@ body {
   background: var(--danger);
 }
 
-/* Speaking progress bar */
-.speaking-bar {
-  height: 100%;
-  width: 100%;
-  background: var(--accent);
-  transform-origin: left;
-  animation: pulse-bar 1.4s ease-in-out infinite;
-}
-
 /* ── Conversation transcript ──────────────────────── */
 .turn {
   max-width: 92%;
@@ -503,13 +494,18 @@ body {
   line-height: 1.5;
 }
 
-/* ── Keyframes ────────────────────────────────────── */
-@keyframes pulse-bar {
-  0%   { transform: scaleX(0.05); opacity: 0.55; }
-  50%  { transform: scaleX(1);    opacity: 1;    }
-  100% { transform: scaleX(0.05); opacity: 0.55; }
+/* h4 sub-headings inside a dish (Description / Ingredients) — visually quiet,
+   but full rotor stops for VoiceOver users navigating by heading level. */
+.browse-item-sub {
+  font-size: 12px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--text-muted);
+  margin: 10px 0 0;
 }
 
+/* ── Keyframes ────────────────────────────────────── */
 @keyframes mic-ring {
   0%   { transform: scale(1);    opacity: 0.65; }
   65%  { transform: scale(1.06); opacity: 0;    }
@@ -523,11 +519,6 @@ body {
 
 /* ── Reduced motion ───────────────────────────────── */
 @media (prefers-reduced-motion: reduce) {
-  .speaking-bar {
-    animation: none;
-    opacity: 1;
-    transform: scaleX(1);
-  }
   .btn-recording::after {
     animation: none;
     opacity: 0.5;

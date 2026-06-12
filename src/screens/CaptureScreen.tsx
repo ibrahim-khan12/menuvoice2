@@ -12,7 +12,7 @@ import { speak, coach, stopCoach } from '../lib/speech';
 import { startCamera, stopCamera, captureFrame, compressImage, enableTorch, disableTorch } from '../lib/camera';
 import { parseMenuFromImages, hasApiKey } from '../lib/openai';
 import { saveRestaurant } from '../lib/storage';
-import { AutoCaptureController } from '../lib/autocapture';
+import { MenuScanner } from '../lib/scanner';
 import { earconTick, earconCapture } from '../lib/earcon';
 import { track, isImageLoggingOn } from '../lib/telemetry';
 
@@ -26,7 +26,7 @@ export default function CaptureScreen({ navigate, goBack }: ScreenProps) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const fileRef = useRef<HTMLInputElement>(null);
   const streamRef = useRef<MediaStream | null>(null);
-  const autoRef = useRef<AutoCaptureController | null>(null);
+  const autoRef = useRef<MenuScanner | null>(null);
   const analyzingRef = useRef(false);
   const prevSteadyRef = useRef(0);
   const reassureIdRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -99,7 +99,7 @@ export default function CaptureScreen({ navigate, goBack }: ScreenProps) {
       stopCoach();
       return;
     }
-    if (!autoRef.current) autoRef.current = new AutoCaptureController();
+    if (!autoRef.current) autoRef.current = new MenuScanner();
 
     let cancelled = false;
     const intro =
@@ -122,9 +122,13 @@ export default function CaptureScreen({ navigate, goBack }: ScreenProps) {
         },
         onStruggle: () => {
           setAutoMode(false);
+          track('capture', 'scanner_struggle', { metadata: { fallback: 'manual' } });
           const msg = 'Auto capture is having trouble. Switching to manual. Find the Take photo button and tap it when you are ready.';
           setStatus('Switched to manual. Tap "Take photo" to take the shot.');
           coach(msg);
+        },
+        onState: (state, detail) => {
+          track('capture', 'guidance', { metadata: { state, ...(detail ? { detail } : {}) } });
         },
         onProgress: (state, steady, max) => {
           if (state === 'steadying' && steady > prevSteadyRef.current) {

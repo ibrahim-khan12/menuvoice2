@@ -9,6 +9,7 @@ import { ScreenProps } from '../nav';
 import { parseMenuFromUrl, hasApiKey } from '../lib/openai';
 import { saveRestaurant } from '../lib/storage';
 import { speak } from '../lib/speech';
+import { track } from '../lib/telemetry';
 
 export default function UrlScreen({ navigate, goBack }: ScreenProps) {
   const [url, setUrl] = useState('');
@@ -35,6 +36,7 @@ export default function UrlScreen({ navigate, goBack }: ScreenProps) {
     if (!/^https?:\/\//i.test(fullUrl)) fullUrl = 'https://' + fullUrl;
 
     setLoading(true);
+    track('url', 'submit', { metadata: { url: fullUrl } });
     announce('Fetching the menu from that website. This may take a moment.');
     try {
       const menu = await parseMenuFromUrl(fullUrl);
@@ -51,8 +53,9 @@ export default function UrlScreen({ navigate, goBack }: ScreenProps) {
     <Screen>
       <Title>Menu from website</Title>
       <Body>
-        Paste the restaurant's menu URL and I will read it for you. Works best with a direct link
-        to the menu page (e.g. restaurant.com/menu).
+        Paste any link from the restaurant — their homepage, menu page, or even a PDF menu —
+        and I will read it for you. If you only know the restaurant's name, use Find a
+        Restaurant on the home screen instead.
       </Body>
 
       <input

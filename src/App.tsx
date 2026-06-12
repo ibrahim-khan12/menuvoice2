@@ -11,6 +11,7 @@ import ConversationScreen from './screens/ConversationScreen';
 import SavedScreen from './screens/SavedScreen';
 import SettingsScreen from './screens/SettingsScreen';
 import UrlScreen from './screens/UrlScreen';
+import FindScreen from './screens/FindScreen';
 
 function Root() {
   const { profile, loaded } = useProfile();
@@ -61,6 +62,8 @@ function Root() {
       return <CaptureScreen navigate={navigate} goBack={goBack} />;
     case 'url':
       return <UrlScreen navigate={navigate} goBack={goBack} />;
+    case 'find':
+      return <FindScreen navigate={navigate} goBack={goBack} />;
     case 'conversation':
       return <ConversationScreen navigate={navigate} goBack={goBack} route={current} />;
     case 'saved':

@@ -4,6 +4,8 @@
   "framework": "vite",
   "functions": {
     "api/chat.ts": { "maxDuration": 60 },
-    "api/scrape.ts": { "maxDuration": 30 }
+    "api/scrape.ts": { "maxDuration": 30 },
+    "api/menu-from-url.ts": { "maxDuration": 60 },
+    "api/find-menu.ts": { "maxDuration": 60 }
   }
 }

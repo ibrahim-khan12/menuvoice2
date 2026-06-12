@@ -4,26 +4,24 @@
 import { synthesizeSpeech, hasApiKey } from './openai';
 import { track } from './telemetry';
 
+// Monotonic counter. stopSpeaking() increments it, invalidating every in-flight
+// playback path in one atomic move — structural guarantee against overlap.
+let speechEpoch = 0;
 let currentAudio: HTMLAudioElement | null = null;
 let currentUrl: string | null = null;
 let settleCurrent: (() => void) | null = null;
 let _speaking = false;
-let activeStreamCancel: (() => void) | null = null;
 
 export function isSpeaking(): boolean {
   return _speaking;
 }
 
 export function stopSpeaking(reason?: 'bargein') {
+  speechEpoch++;
   if (_speaking && reason === 'bargein') {
     track('speech', 'bargein', {});
   }
   _speaking = false;
-  if (activeStreamCancel) {
-    const cancel = activeStreamCancel;
-    activeStreamCancel = null;
-    cancel();
-  }
   if (currentAudio) {
     currentAudio.pause();
     currentAudio = null;
@@ -40,7 +38,8 @@ export function stopSpeaking(reason?: 'bargein') {
   try { window.speechSynthesis?.cancel(); } catch {}
 }
 
-async function playBlob(blob: Blob): Promise<void> {
+async function playBlob(blob: Blob, epoch: number): Promise<void> {
+  if (epoch !== speechEpoch) return;
   const url = URL.createObjectURL(blob);
   currentUrl = url;
   const audio = new Audio(url);
@@ -62,13 +61,32 @@ async function playBlob(blob: Blob): Promise<void> {
   }
 }
 
-async function playUtterance(text: string, voice?: string): Promise<void> {
-  if (!text.trim()) return;
+// Keep a window-level reference to prevent iOS Safari from GC'ing the utterance.
+const _win = window as Window & { _mvUtterance?: SpeechSynthesisUtterance };
+
+async function playBrowser(text: string, epoch: number): Promise<void> {
+  if (epoch !== speechEpoch) return;
+  return new Promise<void>((resolve) => {
+    if (!('speechSynthesis' in window)) return resolve();
+    const u = new SpeechSynthesisUtterance(text);
+    u.rate = 1.0;
+    _win._mvUtterance = u;
+    _speaking = true;
+    u.onend = () => { _speaking = false; _win._mvUtterance = undefined; resolve(); };
+    u.onerror = () => { _speaking = false; _win._mvUtterance = undefined; resolve(); };
+    window.speechSynthesis.speak(u);
+  });
+}
+
+async function playUtterance(text: string, voice: string | undefined, epoch: number): Promise<void> {
+  if (!text.trim() || epoch !== speechEpoch) return;
   const t0 = Date.now();
   track('speech', 'tts_start', { metadata: { text_len: text.length, voice: voice ?? 'default' } });
   if (hasApiKey()) {
     try {
-      await playBlob(await synthesizeSpeech(text, voice));
+      const blob = await synthesizeSpeech(text, voice);
+      if (epoch !== speechEpoch) return;
+      await playBlob(blob, epoch);
       track('speech', 'tts_end', { outcome: 'success', durationMs: Date.now() - t0 });
       return;
     } catch (e) {
@@ -78,14 +96,15 @@ async function playUtterance(text: string, voice?: string): Promise<void> {
   } else {
     track('speech', 'tts_fallback', { metadata: { reason: 'no_api_key' } });
   }
-  await playBrowser(text);
+  await playBrowser(text, epoch);
   track('speech', 'tts_end', { outcome: 'success', durationMs: Date.now() - t0, metadata: { via: 'browser' } });
 }
 
 export async function speak(text: string, voice?: string): Promise<void> {
   stopSpeaking();
   if (!text.trim()) return;
-  await playUtterance(text, voice);
+  const myEpoch = speechEpoch;
+  await playUtterance(text, voice, myEpoch);
 }
 
 // Instant, free, local speech for real-time coaching (capture screen).
@@ -104,22 +123,6 @@ export function coach(text: string) {
 
 export function stopCoach() {
   try { window.speechSynthesis?.cancel(); } catch {}
-}
-
-// Keep a window-level reference to prevent iOS Safari from GC'ing the utterance.
-const _win = window as Window & { _mvUtterance?: SpeechSynthesisUtterance };
-
-function playBrowser(text: string): Promise<void> {
-  return new Promise<void>((resolve) => {
-    if (!('speechSynthesis' in window)) return resolve();
-    const u = new SpeechSynthesisUtterance(text);
-    u.rate = 1.0;
-    _win._mvUtterance = u;
-    _speaking = true;
-    u.onend = () => { _speaking = false; _win._mvUtterance = undefined; resolve(); };
-    u.onerror = () => { _speaking = false; _win._mvUtterance = undefined; resolve(); };
-    window.speechSynthesis.speak(u);
-  });
 }
 
 // A2 — streaming speech
@@ -156,6 +159,9 @@ export function createStreamingSpeech(
   voice?: string,
   opts?: { onSpeakingStart?: () => void },
 ): StreamingSpeechHandle {
+  // Capture epoch at creation. Any stopSpeaking() call after this point
+  // increments speechEpoch, making myEpoch !== speechEpoch — drain bails out.
+  const myEpoch = speechEpoch;
   let buffer = '';
   let cancelled = false;
   let firstSpoken = false;
@@ -167,12 +173,6 @@ export function createStreamingSpeech(
   let prefetchedBlob: Promise<Blob> | null = null;
   let prefetchedFor: string | null = null;
 
-  activeStreamCancel = () => {
-    cancelled = true;
-    prefetchedBlob = null;
-    prefetchedFor = null;
-  };
-
   function startPrefetch(text: string) {
     if (!hasApiKey() || prefetchedFor === text) return;
     prefetchedFor = text;
@@ -183,6 +183,7 @@ export function createStreamingSpeech(
     if (draining) return;
     draining = true;
     while (queue.length > 0 && !cancelled) {
+      if (myEpoch !== speechEpoch) { cancelled = true; break; }
       const sentence = queue.shift()!;
 
       if (!firstSpoken) {
@@ -203,13 +204,16 @@ export function createStreamingSpeech(
           } else {
             blob = await synthesizeSpeech(sentence, voice);
           }
-          if (!cancelled) await playBlob(blob);
+          if (myEpoch !== speechEpoch) { cancelled = true; break; }
+          await playBlob(blob, myEpoch);
+          if (myEpoch !== speechEpoch) { cancelled = true; break; }
           continue;
         } catch (e) {
           console.warn('OpenAI TTS failed, falling back to browser voice:', e);
         }
       }
-      await playBrowser(sentence);
+      if (myEpoch !== speechEpoch) { cancelled = true; break; }
+      await playBrowser(sentence, myEpoch);
     }
     draining = false;
     if (drainDone) {
@@ -220,7 +224,7 @@ export function createStreamingSpeech(
   }
 
   function push(delta: string) {
-    if (cancelled) return;
+    if (cancelled || myEpoch !== speechEpoch) return;
     buffer += delta;
     const [sentences, remainder] = extractComplete(buffer);
     if (sentences.length > 0) {
@@ -245,6 +249,7 @@ export function createStreamingSpeech(
   }
 
   function finish(): Promise<void> {
+    if (myEpoch !== speechEpoch) return Promise.resolve();
     if (buffer.trim()) { queue.push(buffer.trim()); buffer = ''; }
     if (cancelled || (queue.length === 0 && !draining)) return Promise.resolve();
     return new Promise<void>((resolve) => {

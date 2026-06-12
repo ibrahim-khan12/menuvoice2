@@ -325,78 +325,63 @@ export async function extractSessionLearnings(turns: ChatTurn[]): Promise<Sessio
   }
 }
 
-/** Restaurant website URL -> structured menu (scrape then GPT parse). */
+/** Restaurant website URL -> structured menu. One server call does fetch
+ * (HTML / PDF / image, menu-link follow) + GPT extraction. */
 export async function parseMenuFromUrl(url: string): Promise<ParsedMenu> {
   const t0 = Date.now();
-  const scrapeRes = await fetch('/api/scrape', {
+  const res = await fetch('/api/menu-from-url', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ url }),
   });
-  if (!scrapeRes.ok) {
-    const err = await scrapeRes.json().catch(() => ({}));
-    const msg = (err as any).error ?? "Hey, sorry — I couldn't reach that website. Double-check the link and try again.";
-    track('menu', 'parse_url', { outcome: 'failure', durationMs: Date.now() - t0, metadata: { url, reason: 'scrape_failed' } });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    const msg = (err as any).error ?? "Hey, sorry — I couldn't read the menu from that website. Double-check the link and try again.";
+    track('menu', 'parse_url', { outcome: 'failure', durationMs: Date.now() - t0, metadata: { url, status: res.status } });
     throw new Error(msg);
   }
-
-  const data = (await scrapeRes.json()) as { text?: string; imageUrl?: string };
-
-  let content: any;
-  if (data.imageUrl) {
-    content = [
-      {
-        type: 'text',
-        text:
-          'You are reading an image of a restaurant menu. Extract every item you can see. ' +
-          'Group items into natural sections (appetizers, mains, desserts, drinks, specials, etc.). ' +
-          'For each item include: name, description (if shown), price (as written, with currency symbol), ' +
-          'and a best-effort ingredients list. Extract the restaurant name if visible. ' +
-          'Respond ONLY with JSON: {"restaurantName":string|null,"categories":[{"name":string,"items":[{"name":string,"description":string,"price":string,"ingredients":string[]}]}],"notes":string}',
-      },
-      { type: 'image_url', image_url: { url: data.imageUrl, detail: 'high' } },
-    ];
-  } else {
-    const text = data.text;
-    if (!text?.trim()) throw new Error("Hey, sorry — that page looks empty to me. Try linking directly to their menu page, like adding /menu to the address.");
-    content =
-      'You are reading text scraped from a restaurant website. Extract every menu item visible. ' +
-      'Group items into natural sections (appetizers, mains, desserts, drinks, specials, etc.). ' +
-      'For each item include: name, description (if shown), price (as written, with currency symbol), ' +
-      'and a best-effort ingredients list inferred from the name and description. ' +
-      'Extract the restaurant name if visible. ' +
-      'If no menu items are found, set categories to an empty array. ' +
-      'Respond ONLY with JSON: {"restaurantName":string|null,"categories":[{"name":string,"items":[{"name":string,"description":string,"price":string,"ingredients":string[]}]}],"notes":string}\n\n' +
-      'WEBSITE TEXT:\n' + text;
-  }
-
-  const json = await chatCompletions({
-    model: VISION_MODEL,
-    messages: [{ role: 'user', content }],
-    response_format: { type: 'json_object' },
-  });
-
-  const raw = json.choices?.[0]?.message?.content ?? '{}';
-  let parsed: ParsedMenu;
-  try {
-    parsed = JSON.parse(raw);
-  } catch {
-    throw new Error("Hey, sorry — something went wrong reading that menu. Try a different link.");
-  }
-  if (!parsed.categories || parsed.categories.length === 0) {
-    track('menu', 'parse_url', { outcome: 'failure', durationMs: Date.now() - t0, metadata: { url, reason: 'no_items' } });
-    throw new Error(
-      "Hey, sorry — I couldn't find any menu items on that page. It might be the homepage rather than the menu itself. Try adding /menu to the address, or find a link that goes directly to their food menu."
-    );
-  }
-  const itemCount = parsed.categories.reduce((s: number, c: any) => s + c.items.length, 0);
+  const data = (await res.json()) as { menu: ParsedMenu };
+  const itemCount = data.menu.categories.reduce((s, c) => s + c.items.length, 0);
   track('menu', 'parse_url', {
     outcome: 'success',
     durationMs: Date.now() - t0,
-    content: { restaurantName: parsed.restaurantName, itemCount },
+    content: { restaurantName: data.menu.restaurantName, itemCount },
     metadata: { url },
   });
-  return parsed;
+  return data.menu;
+}
+
+/** Restaurant NAME (+ city) -> structured menu, via server-side web search.
+ * Throws a friendly Error when the menu isn't online. */
+export async function findMenuByName(query: string): Promise<{ menu: ParsedMenu; restaurantName: string | null }> {
+  const t0 = Date.now();
+  const res = await fetch('/api/find-menu', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ query }),
+  });
+  const data = (await res.json().catch(() => ({}))) as {
+    menu?: ParsedMenu;
+    restaurantName?: string | null;
+    via?: string;
+    error?: string;
+  };
+  if (!res.ok || !data.menu) {
+    track('menu', 'find_by_name', {
+      outcome: 'failure',
+      durationMs: Date.now() - t0,
+      metadata: { query, status: res.status, reason: data.error },
+    });
+    throw new Error(data.error ?? "I couldn't find that restaurant's menu online. Try adding the city to the name.");
+  }
+  const itemCount = data.menu.categories.reduce((s, c) => s + c.items.length, 0);
+  track('menu', 'find_by_name', {
+    outcome: 'success',
+    durationMs: Date.now() - t0,
+    content: { restaurantName: data.menu.restaurantName ?? data.restaurantName, itemCount },
+    metadata: { query, via: data.via },
+  });
+  return { menu: data.menu, restaurantName: data.restaurantName ?? data.menu.restaurantName ?? null };
 }
 
 /** Text -> mp3 Blob (OpenAI TTS). */

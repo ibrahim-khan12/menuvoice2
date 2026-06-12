@@ -6,6 +6,7 @@ import { ScreenProps } from '../nav';
 import { SavedRestaurant } from '../types';
 import { loadSavedRestaurants, deleteRestaurant } from '../lib/storage';
 import { speak } from '../lib/speech';
+import { track } from '../lib/telemetry';
 
 export default function SavedScreen({ navigate, goBack }: ScreenProps) {
   const [list, setList] = useState<SavedRestaurant[] | null>(null);
@@ -26,6 +27,7 @@ export default function SavedScreen({ navigate, goBack }: ScreenProps) {
 
   const remove = async (id: string, rName: string) => {
     await deleteRestaurant(id);
+    track('saved', 'delete', { content: { restaurantName: rName } });
     refresh();
     speak(`Deleted ${rName}.`);
   };
@@ -55,7 +57,10 @@ export default function SavedScreen({ navigate, goBack }: ScreenProps) {
                 <PrimaryButton
                   label="Open"
                   hint={`Talk to MenuVoice about the menu for ${r.name}`}
-                  onClick={() => navigate({ name: 'conversation', menu: r.menu, restaurantName: r.name })}
+                  onClick={() => {
+                    track('saved', 'open', { content: { restaurantName: r.name } });
+                    navigate({ name: 'conversation', menu: r.menu, restaurantName: r.name });
+                  }}
                   style={{ flex: 1 }}
                 />
                 <SecondaryButton

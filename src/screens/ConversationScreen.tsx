@@ -4,7 +4,7 @@
 //
 // Voice mode ON (default):
 //   App streams TTS sentence-by-sentence; mic auto-opens after each reply.
-//   Barge-in ("stop", "wait", etc.) cuts the app off and opens the mic.
+//   Tap the action button while speaking to interrupt and start talking.
 //   Turn cues: earconSpeak (app speaking), earconThinking (thinking),
 //              earconStart+vibrate (user turn), earconStop+vibrate (heard you).
 //
@@ -13,7 +13,7 @@
 //   Conversation text is still updated in an aria-live region.
 
 import { useEffect, useRef, useState } from 'react';
-import { Screen, PrimaryButton, SecondaryButton } from '../components';
+import { Screen, SecondaryButton } from '../components';
 import { ScreenProps, Route } from '../nav';
 import { ChatTurn, ParsedMenu } from '../types';
 import { useProfile } from '../state/ProfileContext';
@@ -21,8 +21,6 @@ import { speak, stopSpeaking, createStreamingSpeech } from '../lib/speech';
 import {
   SpeechManager,
   isSpeechRecognitionSupported,
-  createBargeInListener,
-  BargeInListener,
 } from '../lib/speechRecognition';
 import { buildOpeningLine, chatReplyStream, extractSessionLearnings, hasApiKey } from '../lib/openai';
 import { track } from '../lib/telemetry';
@@ -47,26 +45,56 @@ const REPEAT_PHRASES = [
   'repeat that', 'say that again', 'what did you say', 'say it again', 'pardon', 'come again',
 ];
 
-// Semantic menu document — VoiceOver heading rotor navigates section → item.
-function MenuDocument({ menu, restaurantName }: { menu: ParsedMenu; restaurantName: string }) {
+// Semantic menu document — VoiceOver heading rotor hierarchy:
+//   h1 restaurant → h2 category (with item count) → h3 dish (name + price in one
+//   heading, so a single rotor stop reads both) → h4 Description / Ingredients.
+function MenuDocument({
+  menu,
+  restaurantName,
+  headingRef,
+}: {
+  menu: ParsedMenu;
+  restaurantName: string;
+  headingRef?: React.RefObject<HTMLHeadingElement>;
+}) {
   return (
     <section aria-label="Full menu — browse with VoiceOver heading rotor" style={{ marginTop: 24 }}>
-      <h1 style={{ fontSize: 22, fontWeight: 700, marginBottom: 4 }}>{restaurantName}</h1>
+      <h1
+        ref={headingRef}
+        tabIndex={-1}
+        style={{ fontSize: 22, fontWeight: 700, marginBottom: 4 }}
+      >
+        {restaurantName}
+      </h1>
       {menu.categories.map((cat) => (
         <section key={cat.name}>
-          <h2 className="browse-category">{cat.name}</h2>
+          <h2 className="browse-category">
+            {cat.name}
+            <span style={{ fontWeight: 400, fontSize: '0.7em' }}>
+              {' '}— {cat.items.length} item{cat.items.length === 1 ? '' : 's'}
+            </span>
+          </h2>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginTop: 10, marginBottom: 24 }}>
             {cat.items.map((item) => (
               <article key={item.name} className="browse-item">
-                <div className="browse-item-header">
-                  <h3 className="browse-item-name">{item.name}</h3>
+                <h3 className="browse-item-name">
+                  {item.name}
                   {item.price && (
-                    <span className="browse-item-price" aria-label={`Price: ${item.price}`}>
-                      {item.price}
-                    </span>
+                    <span className="browse-item-price">{' '}{item.price}</span>
                   )}
-                </div>
-                {item.description && <p className="browse-item-desc">{item.description}</p>}
+                </h3>
+                {item.description && (
+                  <>
+                    <h4 className="browse-item-sub">Description</h4>
+                    <p className="browse-item-desc">{item.description}</p>
+                  </>
+                )}
+                {item.ingredients && item.ingredients.length > 0 && (
+                  <>
+                    <h4 className="browse-item-sub">Ingredients</h4>
+                    <p className="browse-item-desc">{item.ingredients.join(', ')}</p>
+                  </>
+                )}
               </article>
             ))}
           </div>
@@ -104,16 +132,8 @@ export default function ConversationScreen({
   const startMicRef = useRef<() => Promise<void>>(async () => {});
   const speakModeRef = useRef(true);
   speakModeRef.current = speakMode;
-
-  // Barge-in: only while speaking in voice mode.
-  useEffect(() => {
-    if (phase !== 'speaking' || !speakMode) return;
-    const listener: BargeInListener = createBargeInListener(() => {
-      stopSpeaking('bargein');
-      startMicRef.current();
-    });
-    return () => listener.stop();
-  }, [phase, speakMode]);
+  const actionButtonRef = useRef<HTMLButtonElement>(null);
+  const menuHeadingRef = useRef<HTMLHeadingElement>(null);
 
   // Opening: speak menu overview on first mount.
   useEffect(() => {
@@ -142,6 +162,10 @@ export default function ConversationScreen({
   }, []);
 
   const startMic = async () => {
+    // Audio must be stopped before opening the mic — otherwise the recognizer
+    // hears the app's own voice on iOS Safari.
+    stopSpeaking();
+
     if (!isSpeechRecognitionSupported()) {
       const msg = 'Voice input is not supported in this browser. Try Chrome or Safari.';
       setErrorMsg(msg);
@@ -318,11 +342,61 @@ export default function ConversationScreen({
   const toggleSpeakMode = () => {
     const next = !speakMode;
     setSpeakMode(next);
-    if (!next) stopSpeaking();
+    track('conversation', 'mode_toggle', { metadata: { mode: next ? 'voice' : 'browse' } });
+    if (!next) {
+      stopSpeaking();
+      // Browse mode: land on the menu heading so VoiceOver starts at content
+      setTimeout(() => menuHeadingRef.current?.focus(), 50);
+    } else {
+      // Voice mode: land on the action button ready to speak
+      setTimeout(() => actionButtonRef.current?.focus(), 50);
+    }
   };
 
   const displayText = liveText || latestAssistant;
   const indicator = indicatorFor(phase);
+
+  // Single action whose label and handler derive from the current phase.
+  const actionConfig = (() => {
+    switch (phase) {
+      case 'speaking':
+        return {
+          label: 'Stop and talk',
+          hint: 'Interrupt and start speaking',
+          disabled: false,
+          onClick: () => { stopSpeaking('bargein'); startMicRef.current(); },
+        };
+      case 'idle':
+        return {
+          label: 'Tap to talk',
+          hint: 'Start speaking to MenuVoice',
+          disabled: false,
+          onClick: () => startMic(),
+        };
+      case 'recording':
+        return {
+          label: "Tap when you're done",
+          hint: 'Submit what you just said without waiting',
+          disabled: false,
+          onClick: () => speechManagerRef.current?.submitNow(),
+        };
+      case 'thinking':
+      case 'transcribing':
+        return {
+          label: 'One moment…',
+          hint: '',
+          disabled: true,
+          onClick: () => {},
+        };
+      case 'error':
+        return {
+          label: 'Try again',
+          hint: '',
+          disabled: false,
+          onClick: () => { setErrorMsg(''); startMic(); },
+        };
+    }
+  })();
 
   return (
     <Screen>
@@ -338,10 +412,8 @@ export default function ConversationScreen({
         {indicator.label}
       </div>
 
-      {/* Latest exchange — minimal aria-live region */}
+      {/* Latest exchange */}
       <div
-        aria-live="polite"
-        aria-relevant="text"
         style={{
           background: 'var(--surface)',
           border: '1px solid var(--border)',
@@ -353,94 +425,56 @@ export default function ConversationScreen({
           minHeight: 80,
         }}
       >
-        {latestUser && (
-          <div
-            aria-label={`You said: ${latestUser}`}
-            className="turn turn-user"
-          >
-            <div className="turn-speaker">You</div>
-            <div className="turn-text">{latestUser}</div>
-          </div>
-        )}
+        {/* "You said" — live because the app does not speak user words back */}
+        <div aria-live="polite" aria-atomic="true">
+          {latestUser && (
+            <div
+              aria-label={`You said: ${latestUser}`}
+              className="turn turn-user"
+            >
+              <div className="turn-speaker">You</div>
+              <div className="turn-text">{latestUser}</div>
+            </div>
+          )}
+        </div>
+        {/* Assistant reply — off: app already speaks it; VoiceOver can navigate here on demand */}
         {displayText && (
-          <div
-            aria-label={`MenuVoice said: ${displayText}`}
-            className="turn turn-assistant"
-          >
+          <div aria-live="off" className="turn turn-assistant">
             <div className="turn-speaker">MenuVoice</div>
             <div className="turn-text">{displayText}</div>
           </div>
         )}
       </div>
 
-      {/* Action controls */}
-      {phase === 'error' ? (
-        <div className="col">
-          <p role="alert" className="body" style={{ color: 'var(--danger)', textAlign: 'center' }}>
-            {errorMsg}
-          </p>
-          <PrimaryButton
-            label="Try again"
-            onClick={() => { setErrorMsg(''); startMic(); }}
-          />
-        </div>
-      ) : phase === 'speaking' ? (
-        <div className="col" style={{ gap: 8 }}>
-          <div
-            aria-hidden="true"
-            style={{ height: 8, borderRadius: 4, background: 'var(--surface-high)', overflow: 'hidden' }}
-          >
-            <div className="speaking-bar" />
-          </div>
-          <SecondaryButton
-            label="Stop speaking"
-            hint="Interrupt and speak now"
-            onClick={() => { stopSpeaking('bargein'); startMicRef.current(); }}
-            style={{ minHeight: 70 }}
-          />
-        </div>
-      ) : phase === 'recording' ? (
-        <div className="col" style={{ gap: 8 }}>
-          <div
-            role="status"
-            aria-live="polite"
-            style={{
-              minHeight: 70,
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              borderRadius: 'var(--r-md)',
-              border: '2px solid var(--success)',
-              background: 'rgba(109, 214, 138, 0.12)',
-              color: 'var(--success)',
-              fontWeight: 700,
-              fontSize: 20,
-            }}
-          >
-            Listening… speak now
-          </div>
-          <SecondaryButton
-            label="Done talking"
-            hint="Submit what you just said without waiting"
-            onClick={() => speechManagerRef.current?.submitNow()}
-            style={{ minHeight: 64 }}
-          />
-        </div>
-      ) : (
-        <PrimaryButton
-          label={phase === 'idle' ? 'Tap to talk' : 'Please wait…'}
-          hint="Start speaking to MenuVoice"
-          onClick={() => { if (phase === 'idle') startMic(); }}
-          disabled={phase !== 'idle'}
-          style={{ minHeight: 110 }}
-        />
+      {/* Error message — announced immediately via role="alert" */}
+      {phase === 'error' && errorMsg && (
+        <p role="alert" className="body" style={{ color: 'var(--danger)', textAlign: 'center' }}>
+          {errorMsg}
+        </p>
       )}
 
+      {/* Single state-aware action button */}
+      <button
+        ref={actionButtonRef}
+        className="btn btn-primary"
+        onClick={actionConfig.onClick}
+        disabled={actionConfig.disabled}
+        aria-label={actionConfig.hint ? `${actionConfig.label}. ${actionConfig.hint}` : actionConfig.label}
+        style={{ minHeight: 110 }}
+      >
+        {actionConfig.label}
+      </button>
+
+      {/* Mode switch — label states current mode and names what the tap will do */}
       <button
         onClick={toggleSpeakMode}
         aria-pressed={speakMode}
-        aria-label={`Voice mode ${speakMode ? 'on' : 'off'}. Tap to turn ${speakMode ? 'off' : 'on'}.`}
-        className="btn"
+        aria-label={
+          speakMode
+            ? 'Currently in voice mode. Activate to switch to browse mode.'
+            : 'Currently in browse mode. Activate to switch to voice mode.'
+        }
+        className="btn btn-secondary"
         style={{
           minHeight: 64,
           border: `2px solid ${speakMode ? 'var(--accent)' : 'var(--border)'}`,
@@ -448,7 +482,7 @@ export default function ConversationScreen({
           color: speakMode ? 'var(--accent)' : 'var(--text-secondary)',
         }}
       >
-        {speakMode ? 'Voice: ON' : 'Voice: OFF — Browse mode'}
+        {speakMode ? 'Voice mode' : 'Browse mode'}
       </button>
 
       <SecondaryButton
@@ -459,7 +493,7 @@ export default function ConversationScreen({
       />
 
       {/* Semantic menu — VoiceOver heading rotor: h1 restaurant → h2 category → h3 item */}
-      <MenuDocument menu={menu} restaurantName={restaurantName} />
+      <MenuDocument menu={menu} restaurantName={restaurantName} headingRef={menuHeadingRef} />
     </Screen>
   );
 }
@@ -468,7 +502,7 @@ function indicatorFor(phase: Phase): { label: string } {
   switch (phase) {
     case 'speaking':     return { label: 'MenuVoice is speaking…' };
     case 'idle':         return { label: 'Your turn — tap to talk' };
-    case 'recording':    return { label: "Listening… I'll respond when you stop talking" };
+    case 'recording':    return { label: 'Listening — tap when you\'re done' };
     case 'transcribing': return { label: 'Hearing you…' };
     case 'thinking':     return { label: 'Thinking…' };
     case 'error':        return { label: 'Something needs your attention' };
