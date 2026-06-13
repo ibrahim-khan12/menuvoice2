@@ -1,5 +1,10 @@
 # MenuVoice Fixes & Improvements Needed
 
+> STATUS 2026-06-12 (unify + a11y sprint): Browse-mode headers, Speaking-page
+> overlap, and Home-page layout below are DONE (see PROGRESS.md). Find-by-name
+> and menu-from-link are now ONE screen. Remaining open: camera zoom/landscape,
+> allergy spellcheck. Strikethrough-equivalent notes added inline.
+
 ## Em-Dash Removal (USER-FACING TEXT)
 **Status:** Partially completed.
 
@@ -26,6 +31,9 @@
 ---
 
 ## Browse Mode VoiceOver Accessibility Issues
+**Status:** DONE. Each dish is one h3 rotor stop; name+price+description+
+ingredients fold into its aria-label; Description/Ingredients are no longer
+headings; first browse entry speaks rotor guidance.
 **Priority:** HIGH - Accessibility blocker for blind/low-vision users.
 
 ### Problems:
@@ -54,6 +62,9 @@
 ---
 
 ## Speaking Page Redesign
+**Status:** DONE. Bounded .convo-area; full-width bordered bubbles stacked with
+gaps (no overlap); readable surfaces, not red; empty-state placeholder; live
+regions scoped (user polite, assistant off since the app speaks it).
 **Priority:** HIGH - Core user interaction flow is broken by overlap.
 
 ### Problems:
@@ -134,6 +145,8 @@
 ---
 
 ## Home Page Redesign
+**Status:** DONE. Single column of large non-overlapping buttons, h1 "MenuVoice"
+heading, two find entry points collapsed into one "Find a Menu".
 **Priority:** HIGH - Unusable; UI elements overlapping.
 
 - **Problem**: Beginning/home page UI elements overlap with each other, layout is broken.

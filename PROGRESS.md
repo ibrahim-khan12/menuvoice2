@@ -133,6 +133,40 @@ Ingredients / price stop hijacking dish-to-dish navigation; polish + ship.
       assistant bubble accent-bordered, AAA surfaces). Empty-state placeholder.
 - [x] No em-dashes in any new copy. npm run build green.
 
+### Continued same sprint — backlog burn-down (REVIEW.md + VOICEOVER-AUDIT)
+- [x] REVIEW.md #5/#12 events.ts: dropped permissive CORS for a same-origin
+      guard; every string field clamped, content/metadata JSON capped; client_ts
+      and duration_ms coerced; Promise.allSettled so one bad row no longer drops
+      the batch; row cap 100 to 50.
+- [x] REVIEW.md #7 timeout budget: find-menu search capped at 35s, stage-2 fetch
+      gated on >15s remaining of a 55s budget; menu-from-url #14 dead conditional
+      removed. Users now hear the honest "menu not online" message, not a 504.
+- [x] REVIEW.md #9/#10/#11 scanner: no manual fallback mid-progress; heartbeat
+      nag gated to stage-1 only at 3x interval; stop() releases video/cb/prev.
+- [x] VOICEOVER-AUDIT P1-2 (Home h1), P1-5 (Saved: status region + two-tap
+      delete confirm + focus return), P1-6 (Settings: allergy save announced in
+      DOM + aloud), P1-7 (Find submit reachable when empty), P2-3 (drop dup
+      phase aria-label).
+- [x] Removed dead UrlScreen + 'url' route (truly one place to find a menu).
+
+### Shipped this sprint (commits on main, all build-green + pushed)
+2c69fe7 unify find + a11y heading rotor · fb53962 events hardening + Find VO
+4c52845 find-menu budget · 7d8de5a scanner reliability · 20ec463 VoiceOver P1s
+5bac3fd UrlScreen removal
+
+### STILL OPEN (next session)
+- REVIEW.md minors: #8 (PDF Content-Length pre-check / streamed cap), #13
+  (Browserless token in query string -> header), #16 (telemetry multi-tab /
+  pre-init queue race).
+- Camera feature asks (FIXES-NEEDED): pinch/buttons ZOOM, LANDSCAPE capture,
+  preview-vs-actual range match. (Capture sound + immediate audio already done;
+  earconCapture fires on auto-capture.)
+- VOICEOVER-AUDIT remaining: P1-3 (Onboarding focus on step change), P1-4
+  (mic-transcription feedback in DOM on Login/Onboarding/Settings), P1-8/P2-* polish.
+- Allergy spellcheck (FIXES-NEEDED MEDIUM): fuzzy-correct misspelled allergens.
+- SMOKE-RESULTS.md chain-restaurant 404s: renew BROWSERLESS_TOKEN, re-run
+  scripts/smoke-restaurants.mjs against the new deploy.
+
 LEFT OFF (2026-06-12 second session): three REVIEW.md Tier-1 fixes committed
 (f0f725d) and build green. Sub-agent was finishing the app-voice toggle at the
 4:41 PM hard stop — verify speech.ts/SettingsScreen.tsx edits, run npm run
