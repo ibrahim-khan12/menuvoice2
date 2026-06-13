@@ -10,7 +10,6 @@ import CaptureScreen from './screens/CaptureScreen';
 import ConversationScreen from './screens/ConversationScreen';
 import SavedScreen from './screens/SavedScreen';
 import SettingsScreen from './screens/SettingsScreen';
-import UrlScreen from './screens/UrlScreen';
 import FindScreen from './screens/FindScreen';
 
 function Root() {
@@ -60,8 +59,6 @@ function Root() {
       return <HomeScreen navigate={navigate} goBack={goBack} />;
     case 'capture':
       return <CaptureScreen navigate={navigate} goBack={goBack} route={current} />;
-    case 'url':
-      return <UrlScreen navigate={navigate} goBack={goBack} />;
     case 'find':
       return <FindScreen navigate={navigate} goBack={goBack} />;
     case 'conversation':
