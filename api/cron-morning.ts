@@ -11,7 +11,7 @@
 // Internal/test accounts are excluded via REPORT_EXCLUDE_EMAILS.
 
 import type { VercelRequest, VercelResponse } from '@vercel/node';
-import { buildMorningReport, renderText, renderEmailHtml, sendEmail } from './_morningData';
+import { buildMorningReport, renderText, renderEmailHtml, sendEmail } from './_morningData.js';
 
 function authorized(req: VercelRequest): boolean {
   const auth = (req.headers.authorization as string) ?? '';
