@@ -121,13 +121,18 @@ https://<deployment>/api/morning?key=<REPORT_KEY>
 
 - **New users** = first-ever event landed inside the window.
 - **Returning ("original") users** = used it before, came back — shown with lifetime session count + "what they did" (menus scanned, questions asked, searches, saves).
+- **Identified users only.** The report counts people by `user_email`. A session's
+  pre-login rows (session start / first screen / welcome TTS, fired before Google
+  login attaches the email) are NOT counted as a separate "anonymous" user — they
+  belong to whichever account the session resolves to. There is no anonymous metric.
 - **Internal/test accounts are excluded** via `REPORT_EXCLUDE_EMAILS` (default `2firemaster27@gmail.com,avitaldrel@gmail.com`).
 - Window: `?hours=N` or `?days=N` (default 24h). Output: HTML (default), `?format=text` (cron/email friendly), or `?format=json`.
 - Same `REPORT_KEY` guard. Zero AI tokens.
 
 #### Automated daily email (`/api/cron-morning`)
 
-A Vercel Cron (configured in `vercel.json`, runs `0 13 * * *` = 13:00 UTC daily) calls
+A Vercel Cron (configured in `vercel.json`, runs `0 11 * * *` = 11:00 UTC =
+**7:00 AM Eastern during EDT**; it is 6 AM ET during winter/EST) calls
 `/api/cron-morning`, builds the digest, and emails it. The Gmail account
 **2firemaster27@gmail.com** has a **"MenuVoice Reports"** label + a filter
 (subject contains `[MenuVoice] Morning report`) so every report is auto-labeled.

@@ -49,7 +49,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
   try {
     const d = await buildMorningReport(hours);
-    const h = d.headline;
+    const t = d.totals;
 
     if (format === 'json') {
       res.setHeader('Content-Type', 'application/json; charset=utf-8');
@@ -65,7 +65,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     // ---- HTML dashboard view ----
     const verdict = d.anyoneUsed
-      ? `<p class="verdict yes">Yes — MenuVoice was used. <strong>${esc(h.users)}</strong> real user(s) and <strong>${esc(h.anon_sessions)}</strong> anonymous session(s).</p>`
+      ? `<p class="verdict yes">Yes — MenuVoice was used by <strong>${esc(t.users)}</strong> ${Number(t.users) === 1 ? 'person' : 'people'} (${esc(t.sessions)} session${Number(t.sessions) === 1 ? '' : 's'}).</p>`
       : `<p class="verdict no">No one used MenuVoice in this window.</p>`;
 
     const card = (label: string, value: unknown, cls = '') =>
@@ -129,7 +129,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 <body>
 <h1>MenuVoice morning report</h1>
 <p class="meta">Window: <strong>${esc(d.windowLabel)}</strong> &middot; generated ${esc(d.generated)}
- &middot; data ${esc(fmtTs(h.first_ts))} &rarr; ${esc(fmtTs(h.last_ts))}</p>
+ ${t.dataFrom ? `&middot; data ${esc(t.dataFrom)} &rarr; ${esc(t.dataTo)}` : ''}</p>
 <p class="nav">View:
   <a href="?key=${esc(provided)}&hours=24">24 h</a>
   <a href="?key=${esc(provided)}&hours=48">48 h</a>
@@ -143,10 +143,9 @@ ${verdict}
 <div class="cards">
   ${card('New users', d.newUsers.length, 'hl')}
   ${card('Returning users', d.returningUsers.length)}
-  ${card('Anon sessions', h.anon_sessions)}
-  ${card('Sessions', h.sessions)}
-  ${card('Events', h.events)}
-  ${card('Failures', h.failures)}
+  ${card('Sessions', t.sessions)}
+  ${card('Events', t.events)}
+  ${card('Failures', t.failures)}
 </div>
 
 <h2>New users (${esc(d.newUsers.length)})</h2>

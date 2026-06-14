@@ -9,6 +9,6 @@
     "api/find-menu.ts": { "maxDuration": 60 }
   },
   "crons": [
-    { "path": "/api/cron-morning", "schedule": "0 13 * * *" }
+    { "path": "/api/cron-morning", "schedule": "0 11 * * *" }
   ]
 }
