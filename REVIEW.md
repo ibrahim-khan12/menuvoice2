@@ -10,6 +10,8 @@ Line numbers for api/_menuCore.ts, api/find-menu.ts, api/menu-from-url.ts refer 
 ## Critical
 
 ### 1. SSRF — server fetches user/model-supplied URLs with no private-network protection
+> **✅ FIXED** — `assertPublicUrl()` added to `api/_menuCore.ts`; re-validated after every redirect hop.
+
 **api/_menuCore.ts:110-118 (`fetchOne`), reachable from api/menu-from-url.ts:13-23 and api/find-menu.ts:116-117**
 
 `fetchOne()` fetches any URL with `redirect: 'follow'` and no hostname/IP checks. `menu-from-url`
@@ -53,6 +55,8 @@ practical cases. Also validate `result.menuUrl` with the same check before stage
 ## Major
 
 ### 2. find-menu returns unvalidated LLM `categories` — malformed shape crashes the client mid-flow
+> **OPEN** — tracked as C2 in FIXES-NEEDED.md.
+
 **api/find-menu.ts:100-110; consumed by src/lib/openai.ts (HEAD) `findMenuByName` and `buildOpeningLine`**
 
 Stage 1 forwards `result.categories` verbatim if `menuItemCount(direct) >= 3`. `menuItemCount`
@@ -73,6 +77,8 @@ const categories = (Array.isArray(result?.categories) ? result.categories : [])
 ```
 
 ### 3. Telemetry flush can wedge permanently: 64 KB `keepalive` limit + head-of-line blocking + unbounded queue
+> **✅ FIXED** — 60 KB cap, split or drop poison event, re-entrancy guard added.
+
 **src/lib/telemetry.ts:88-107 (`flush`), 70-85 (`track`)**
 
 `fetch(..., { keepalive: true })` rejects when the body exceeds 64 KiB (spec'd limit, enforced by
@@ -103,6 +109,8 @@ in-flight flush, and don't use `keepalive` on the non-beacon path at all (it's o
 pagehide, where `sendBeacon` is already used).
 
 ### 4. FindScreen: stale `loading` closure can leak the reassurance interval — speaks "Still searching…" forever over the menu conversation
+> **✅ FIXED** — `inFlightRef` guard prevents parallel `find()` calls; interval cleanup in `finally` block.
+
 **src/screens/FindScreen.tsx:53-56, 84, with no in-flight guard in `find` (39-69)**
 
 `find()` has no synchronous re-entry guard; the Enter handler checks the `loading` value captured
@@ -129,6 +137,8 @@ const find = async () => {
 ```
 
 ### 5. api/events.ts: unauthenticated, CORS `*`, no rate limit — anyone can write unlimited rows (and arbitrary `user_email`) to paid Postgres
+> **✅ FIXED** — CORS hardened, per-field size caps applied, row cap 50, `Promise.allSettled`.
+
 **api/events.ts:63-67, 78-83**
 
 The endpoint is wide open cross-origin, accepts 100 rows per call with no per-field size caps
@@ -146,6 +156,8 @@ const s = (v: unknown, max: number) => (typeof v === 'string' ? v.slice(0, max) 
 ```
 
 ### 6. iOS Safari: `coach()` calls `speechSynthesis.cancel()` then `speak()` synchronously — utterances are frequently dropped
+> **OPEN** — tracked as C4 in FIXES-NEEDED.md (HIGH RISK, core accessibility loop goes silent on iOS).
+
 **src/lib/speech.ts (HEAD) `coach()`; primary consumer is the scanner coaching path (src/lib/scanner.ts emit → CaptureScreen onCoach)**
 
 On iOS WebKit, `speechSynthesis.speak()` issued in the same task as `cancel()` is silently
@@ -166,6 +178,8 @@ setTimeout(() => {                 // give WebKit a task boundary after cancel()
 self-cancelling at the 170 ms tick rate.)
 
 ### 7. find-menu worst-case runtime far exceeds its 60 s `maxDuration` — opaque 504 instead of the friendly error
+> **✅ FIXED** — 35s search budget, 55s total deadline, friendly timeout error added.
+
 **api/find-menu.ts:73 (50 s search) + 117-118 (fetchMenuSource: 15 s + 25 s Browserless + up to 2 link hops) + parse (55 s); vercel.json `api/find-menu.ts: 60`**
 
 The internal timeouts sum to several minutes, but Vercel kills the function at 60 s. Any search
@@ -185,6 +199,8 @@ const remaining = () => Math.max(1_000, deadline - Date.now());
 ## Minor
 
 ### 8. PDF size checked only after the whole body is buffered; no Content-Length pre-check
+> **OPEN** — tracked as C5 in FIXES-NEEDED.md.
+
 **api/_menuCore.ts:134-139**
 
 `await response.arrayBuffer()` downloads an unbounded body into serverless memory before the
@@ -194,6 +210,8 @@ branch — `response.text()` is unbounded, sliced to 60 k only afterwards).
 read via `response.body.getReader()` accumulating with an early abort once the cap is exceeded.
 
 ### 9. Scanner: struggle timer fires even mid-countdown, yanking auto mode away right before capture
+> **✅ FIXED** — struggle timer now checks `goodSince` before firing.
+
 **src/lib/scanner.ts:266-270**
 
 The 20 s `STRUGGLE_MS` check runs before the quality pipeline and ignores progress: if the user
@@ -204,6 +222,8 @@ the feature serves.
 (or reset `armedAt` whenever `goodSince` is first set).
 
 ### 10. Scanner: heartbeat re-nags every 6 s, contradicting the documented "silence after second message"
+> **✅ FIXED** — heartbeat gated to `coachStage === 1` with 3x interval, state-neutral phrase.
+
 **src/lib/scanner.ts:180-182 (`coachFor`)**
 
 After stage-1 escalation, the `now - lastCoachAt > HEARTBEAT_MS` branch emits "Still looking. Keep
@@ -214,6 +234,8 @@ state changes."
 and use a state-neutral phrase, or drop the branch.
 
 ### 11. Scanner: `stop()` keeps references to the video element and callbacks
+> **✅ FIXED** — `stop()` now nulls `this.video`, `this.cb`, `this.prev`.
+
 **src/lib/scanner.ts:142-145**
 
 `stop()` clears the timer but leaves `this.video`, `this.cb`, `this.prev` set, retaining the
@@ -221,6 +243,8 @@ detached `<video>`/stream and React closures for the scanner's lifetime.
 **Fix:** `this.video = null; this.cb = null; this.prev = null;` in `stop()`.
 
 ### 12. events.ts: one malformed event silently drops the whole batch
+> **✅ FIXED** — `Promise.allSettled`, `client_ts`/`duration_ms` coercion added.
+
 **api/events.ts:85-105**
 
 `client_ts` and `duration_ms` are inserted unvalidated; a non-timestamp string or float makes
@@ -231,12 +255,16 @@ Postgres reject that INSERT, `Promise.all` rejects, and the entire 100-row batch
 (Parameterization itself is done correctly — no SQL injection found.)
 
 ### 13. Browserless token sent in the URL query string
+> **OPEN** — tracked as C1 in FIXES-NEEDED.md.
+
 **api/_menuCore.ts:94**
 
 `?token=${BROWSERLESS_TOKEN}` ends up in intermediary/proxy/error logs. Browserless accepts the
 token via header; prefer `headers: { Authorization: 'Bearer ...' }` or at minimum never log `res.url`.
 
 ### 14. menu-from-url: dead conditional
+> **✅ FIXED** — simplified to `sourceUrl: source.url`.
+
 **api/menu-from-url.ts:35**
 
 `source.kind === 'html' ? source.url : source.url` — both branches identical. Intent was probably
@@ -244,6 +272,8 @@ to return the *final* (post-redirect / post-link-hop) URL in all cases, which `s
 is; simplify to `sourceUrl: source.url`.
 
 ### 15. FindScreen: navigation tagged `source: 'url'` and `loading` left true on error focus loss
+> **PARTIAL** — `autoFocus` (VoiceOver focus skips screen title) tracked as B5/P2-7 in FIXES-NEEDED.md. Analytics `source: 'url'` tag for find-by-name results still open (minor).
+
 **src/screens/FindScreen.tsx:63**
 
 Find-by-name results are tracked downstream as `source: 'url'`, muddying the new find-flow
@@ -252,6 +282,8 @@ Also `autoFocus` (line 88) moves VoiceOver focus past the screen title on entry,
 sentence ("Find a restaurant…") is skipped by VO users while `speak()` talks over it.
 
 ### 16. Telemetry: multi-tab and pre-init races
+> **OPEN** — tracked as C3 in FIXES-NEEDED.md.
+
 **src/lib/telemetry.ts:113-117**
 
 Two tabs both `restore()` the same localStorage queue and double-send it; and
