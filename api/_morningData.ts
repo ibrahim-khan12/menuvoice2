@@ -3,7 +3,10 @@
 // Underscore prefix => Vercel does not expose this as an HTTP route.
 
 import { createClient } from '@vercel/postgres';
-import nodemailer from 'nodemailer';
+// nodemailer is imported lazily inside sendEmail() (its only use). A top-level
+// import pulls it into module load for EVERY consumer of this file — including the
+// /api/morning and /api/dashboard view endpoints — and nodemailer failing to load
+// in the Vercel runtime crashed those functions (FUNCTION_INVOCATION_FAILED).
 
 export interface UserRow {
   user_email: string;
@@ -316,6 +319,7 @@ export async function sendEmail(opts: { to: string; subject: string; html: strin
   const user = process.env.GMAIL_USER;
   const pass = process.env.GMAIL_APP_PASSWORD;
   if (user && pass) {
+    const nodemailer = (await import('nodemailer')).default;
     const transport = nodemailer.createTransport({
       service: 'gmail',
       auth: { user, pass },
