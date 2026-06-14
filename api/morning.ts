@@ -18,7 +18,15 @@
 //   format=json raw JSON
 
 import type { VercelRequest, VercelResponse } from '@vercel/node';
-import { buildMorningReport, renderText, esc, fmtTs, ago, activity, type UserRow } from './_morningData';
+import { buildMorningReport, renderText, renderEmailHtml, esc, fmtTs, ago, activity, type UserRow } from './_morningData';
+
+// Subject line shared with the email path so a Gmail filter matches both.
+function emailSubject(d: { anyoneUsed: boolean; newUsers: unknown[]; returningUsers: unknown[] }): string {
+  const date = new Date().toISOString().slice(0, 10);
+  return d.anyoneUsed
+    ? `[MenuVoice] Morning report ${date} — ${d.newUsers.length} new, ${d.returningUsers.length} returning`
+    : `[MenuVoice] Morning report ${date} — no users in window`;
+}
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   const expected = process.env.REPORT_KEY;
@@ -61,6 +69,21 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       res.setHeader('Content-Type', 'text/plain; charset=utf-8');
       res.setHeader('Cache-Control', 'no-store');
       return res.status(200).send(renderText(d));
+    }
+
+    // Ready-to-send email payload for an external sender (e.g. a scheduled agent
+    // that delivers via Gmail). Returns the exact subject/html/text the cron uses.
+    if (format === 'email') {
+      const host = req.headers.host;
+      const dashboardUrl = host ? `https://${host}/api/morning?key=${provided}` : undefined;
+      res.setHeader('Content-Type', 'application/json; charset=utf-8');
+      res.setHeader('Cache-Control', 'no-store');
+      return res.status(200).json({
+        to: process.env.REPORT_EMAIL_TO ?? '2firemaster27@gmail.com',
+        subject: emailSubject(d),
+        html: renderEmailHtml(d, dashboardUrl),
+        text: renderText(d),
+      });
     }
 
     // ---- HTML dashboard view ----

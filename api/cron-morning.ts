@@ -34,6 +34,13 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       ? envHours
       : 24;
 
+  // If no server-side transport is set, this path is a clean no-op (200) — the
+  // active sender is the scheduled cloud agent hitting /api/morning?format=email.
+  const hasTransport = !!(process.env.RESEND_API_KEY || (process.env.GMAIL_USER && process.env.GMAIL_APP_PASSWORD));
+  if (!hasTransport) {
+    return res.status(200).json({ ok: true, sent: false, reason: 'no server transport configured; cloud agent handles delivery' });
+  }
+
   try {
     const d = await buildMorningReport(hours);
 
