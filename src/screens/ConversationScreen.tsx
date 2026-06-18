@@ -544,6 +544,13 @@ export default function ConversationScreen({
       {/* Latest exchange — a bounded conversation region. Each message is its
           own bubble in a vertical stack with gaps, so bubbles never overlap each
           other or the controls, no matter how long a reply runs. */}
+      <p
+        className="sr-only"
+        aria-live={phase === 'recording' ? 'off' : 'polite'}
+        aria-atomic="true"
+      >
+        {conversationSummary}
+      </p>
       <section className="convo-area" aria-hidden="true">
         {/* "You said" — live because the app does not speak user words back */}
         <div>
