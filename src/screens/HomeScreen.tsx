@@ -12,19 +12,19 @@ export default function HomeScreen({ navigate }: ScreenProps) {
       <div className="col" style={{ marginTop: 24 }}>
         <PrimaryButton
           label="Scan a Menu"
-          hint="Point your camera at a paper menu and I will read it"
+          hint="Use your camera to read a paper menu"
           onClick={() => navigate({ name: 'capture' })}
           style={{ minHeight: 96 }}
         />
         <PrimaryButton
           label="Find a Menu"
-          hint="Type a restaurant name or paste a website link, and I will find the menu and read it"
+          hint="Search by restaurant name or paste a menu link"
           onClick={() => navigate({ name: 'find' })}
           style={{ minHeight: 96 }}
         />
         <SecondaryButton
-          label="My Saved Restaurants"
-          hint="Open a menu you captured before"
+          label="Saved Restaurants"
+          hint="Open a menu you already saved"
           onClick={() => navigate({ name: 'saved' })}
           style={{ minHeight: 96 }}
         />
@@ -34,7 +34,7 @@ export default function HomeScreen({ navigate }: ScreenProps) {
 
       <SecondaryButton
         label="Settings"
-        hint="Change your profile, allergies, and voice preferences"
+        hint="Change your name, allergies, and voice settings"
         onClick={() => navigate({ name: 'settings' })}
       />
     </Screen>

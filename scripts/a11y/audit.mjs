@@ -45,7 +45,7 @@ const SCREENS = [
   { name: 'home',       ls: { 'menuvoice.profile.v1': PROFILE } },
   { name: 'capture',    ls: { 'menuvoice.profile.v1': PROFILE }, click: 'Scan a Menu' },
   { name: 'find',       ls: { 'menuvoice.profile.v1': PROFILE }, click: 'Find a Menu' },
-  { name: 'saved',      ls: { 'menuvoice.profile.v1': PROFILE, 'menuvoice.savedRestaurants.v1': SAVED }, click: 'My Saved Restaurants' },
+  { name: 'saved',      ls: { 'menuvoice.profile.v1': PROFILE, 'menuvoice.savedRestaurants.v1': SAVED }, click: 'Saved Restaurants' },
   { name: 'settings',   ls: { 'menuvoice.profile.v1': PROFILE }, click: 'Settings' },
 ];
 

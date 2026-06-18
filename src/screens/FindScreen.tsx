@@ -70,7 +70,7 @@ export default function FindScreen({ navigate, goBack }: ScreenProps) {
   const inFlightRef = useRef(false);
 
   useEffect(() => {
-    speak('Find a menu. Type a restaurant name with the city, like Burger Bros, Springfield, or paste a website link. Then tap Find menu.');
+    speak('Find a menu. Enter a restaurant name and city, or paste a menu link. Then tap Find menu.');
     return () => {
       if (reassureRef.current) clearInterval(reassureRef.current);
       stopSpeaking();
@@ -153,10 +153,7 @@ export default function FindScreen({ navigate, goBack }: ScreenProps) {
   return (
     <Screen>
       <Title>Find a menu</Title>
-      <Body>
-        Type a restaurant name and city, or paste a website link or PDF.
-        If the location is unclear, I will ask you to clarify.
-      </Body>
+      <Body>Enter a restaurant name and city, or paste a menu link or PDF.</Body>
 
       <input
         className="input"
@@ -165,7 +162,7 @@ export default function FindScreen({ navigate, goBack }: ScreenProps) {
         value={query}
         onChange={(e) => setQuery(e.target.value)}
         onKeyDown={(e) => { if (e.key === 'Enter' && !loading) find(); }}
-        placeholder="Luigi's Pizza, Springfield   or   restaurant.com/menu"
+        placeholder="Luigi's Pizza, Springfield or restaurant.com/menu"
         aria-label="Restaurant name or website link"
         disabled={loading}
         style={{ fontSize: 18 }}
@@ -186,15 +183,15 @@ export default function FindScreen({ navigate, goBack }: ScreenProps) {
             I found {pendingMatch.restaurantName?.trim() || pendingMatch.requestedName}. Is this the restaurant you want?
           </p>
           <div className="row">
-            <PrimaryButton label="Yes, open this menu" onClick={confirmMatch} />
-            <SecondaryButton label="No, search again" onClick={rejectMatch} />
+            <PrimaryButton label="Open this menu" onClick={confirmMatch} />
+            <SecondaryButton label="Not this one" onClick={rejectMatch} />
           </div>
         </div>
       ) : null}
 
       <PrimaryButton
-        label={loading ? 'Finding…' : 'Find menu'}
-        hint="Find this restaurant's menu and read it to me"
+        label={loading ? 'Finding...' : 'Find menu'}
+        hint="Search for this menu"
         onClick={find}
         disabled={loading}
         style={{ minHeight: 80 }}

@@ -78,7 +78,7 @@ export default function CaptureScreen({
   const reassureCountRef = useRef(0);
 
   const [photos, setPhotos] = useState<string[]>([]);
-  const [status, setStatus] = useState('Starting camera…');
+  const [status, setStatus] = useState('Starting camera...');
   const [coachStatus, setCoachStatus] = useState('');
   const [camError, setCamError] = useState('');
   const [cameraReady, setCameraReady] = useState(false);
@@ -212,8 +212,8 @@ export default function CaptureScreen({
     setPhotos((prev) => {
       const next = [...prev, b64];
       const msg = viaAuto
-        ? `Got it, photo ${next.length}. Line up the next page, or tap Analyze to read the menu.`
-        : `Photo ${next.length} captured. Take another, or tap Analyze.`;
+        ? `Got it, photo ${next.length}. Line up the next page, or tap Read menu.`
+        : `Photo ${next.length} captured. Take another, or tap Read menu.`;
       setStatus(msg);
       coach(msg);
       track('capture', 'photo_added', { metadata: { mode: viaAuto ? 'auto' : 'manual', photo_count: next.length } });
@@ -242,7 +242,7 @@ export default function CaptureScreen({
     if (!files.length) return;
     e.target.value = '';
 
-    const msg = `Processing ${files.length} photo${files.length > 1 ? 's' : ''}…`;
+    const msg = `Processing ${files.length} photo${files.length > 1 ? 's' : ''}...`;
     setStatus(msg);
 
     const results = await Promise.allSettled(files.map((f) => compressImage(f)));
@@ -378,7 +378,7 @@ export default function CaptureScreen({
           color: autoMode ? 'var(--accent)' : 'var(--text-secondary)',
         }}
       >
-        <span aria-hidden="true">{autoMode ? 'Auto-capture: ON' : 'Auto-capture: OFF'}</span>
+        <span aria-hidden="true">{autoMode ? 'Auto capture: ON' : 'Auto capture: OFF'}</span>
       </button>
 
       <div
@@ -425,7 +425,7 @@ export default function CaptureScreen({
               fontSize: 20,
             }}
           >
-            Reading the menu…
+            Reading the menu...
           </div>
         )}
       </div>
@@ -466,9 +466,9 @@ export default function CaptureScreen({
 
         <PrimaryButton
           label={
-            !cameraReady && !camError ? 'Starting camera…' : 'Take photo'
+            !cameraReady && !camError ? 'Starting camera...' : 'Take photo'
           }
-          hint={autoMode ? 'Take the photo immediately without waiting for auto-capture' : 'Takes a photo of the menu'}
+          hint={autoMode ? 'Take a photo now' : 'Take a photo of the menu'}
           onClick={manualCapture}
           disabled={analyzing || !!camError || !cameraReady}
           style={{ minHeight: 80 }}
@@ -476,14 +476,14 @@ export default function CaptureScreen({
 
         <div className="row">
           <SecondaryButton
-            label="Upload from Library"
+            label="Upload photos"
             onClick={() => fileRef.current?.click()}
             disabled={analyzing}
           />
           {photos.length > 0 && (
             <PrimaryButton
-              label={analyzing ? 'Reading…' : `Analyze (${photos.length})`}
-              hint="Send the captured photos to AI for menu extraction"
+              label={analyzing ? 'Reading...' : `Read menu (${photos.length})`}
+              hint="Read the menu from these photos"
               onClick={analyze}
               disabled={analyzing}
             />

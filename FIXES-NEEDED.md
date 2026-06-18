@@ -223,6 +223,18 @@ Do in one pass:
 **Fix:** Before opening the menu or saving the restaurant, present a confirmation step with the restaurant name, town/address when available, and a clear yes/no path. The user should be able to answer by voice or touch. If they say no, return to the search/location prompt or offer the next likely match.  
 **Acceptance:** After restaurant lookup, the app asks a clear confirmation such as "I found Mario's Pizza in Montclair. Is this the restaurant you want?" It only proceeds after a yes. A no does not save or open that restaurant.
 
+### B11. Copy audit for VoiceOver-first screens [S, MED RISK]
+**Source:** User field-testing notes, 2026-06-18  
+**Problem:** Several screens still use extra helper copy, jargon, or overly long button labels and hints. Blind and low-vision users should hear only the words that explain the next action or a real state change. Extra copy slows VoiceOver navigation and makes the app harder to parse.
+**Fix:** Review every visible label, helper line, button label, and spoken button hint on the app screens:
+- Remove filler and repeated explanations.
+- Keep only action guidance, safety guidance, and state-change feedback.
+- Prefer task words over product or technical words, for example "Read menu" instead of "Analyze".
+- Make the visible label carry the core meaning so the `aria-label` hint can stay short.
+- Re-test Home, Find, Onboarding, Capture, Conversation, Saved, Login, and Settings with VoiceOver running.
+
+**Acceptance:** Each screen can be navigated by VoiceOver without unnecessary copy, while still explaining what to do next anywhere the action would otherwise be unclear.
+
 ---
 
 ## C — Code / Security

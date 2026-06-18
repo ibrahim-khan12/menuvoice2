@@ -49,7 +49,7 @@ function Root() {
   if (!loaded) {
     return (
       <div className="screen" style={{ alignItems: 'center', justifyContent: 'center' }}>
-        <p className="body" role="status">Loading MenuVoice…</p>
+        <p className="body" role="status">Loading MenuVoice...</p>
       </div>
     );
   }

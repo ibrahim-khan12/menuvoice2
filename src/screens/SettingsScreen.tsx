@@ -156,7 +156,7 @@ export default function SettingsScreen({ goBack, navigate }: ScreenProps) {
           onBlur={() => saveName(nameVal)}
           onKeyDown={(e) => { if (e.key === 'Enter') saveName(nameVal); }}
           placeholder="First name"
-          aria-label="Your name. Tap mic to speak it"
+          aria-label="Your name"
           style={{ flex: 1, margin: 0 }}
         />
         <button
@@ -174,7 +174,7 @@ export default function SettingsScreen({ goBack, navigate }: ScreenProps) {
             cursor: 'pointer',
           }}
         >
-          {nameRec !== 'idle' ? '…' : 'Mic'}
+          {nameRec !== 'idle' ? '...' : 'Mic'}
         </button>
       </div>
 
@@ -266,7 +266,7 @@ export default function SettingsScreen({ goBack, navigate }: ScreenProps) {
             cursor: 'pointer',
           }}
         >
-          {dislikeRec !== 'idle' ? '…' : 'Mic'}
+          {dislikeRec !== 'idle' ? '...' : 'Mic'}
         </button>
       </div>
 
@@ -277,7 +277,7 @@ export default function SettingsScreen({ goBack, navigate }: ScreenProps) {
         <div>
           <span style={{ fontSize: 18 }}>App voice</span>
           <p style={{ fontSize: 14, color: 'var(--text-secondary)', margin: '4px 0 0' }}>
-            Turn off if you use VoiceOver and the app voice talks over it.
+            Turn this off if it talks over VoiceOver.
           </p>
         </div>
         <input
@@ -327,7 +327,7 @@ export default function SettingsScreen({ goBack, navigate }: ScreenProps) {
       </label>
 
       <Heading>Allergies &amp; restrictions</Heading>
-      <Body>Comma separated. I warn you about these before any dish.</Body>
+      <Body>Comma separated. I warn you before describing a dish.</Body>
       <input
         className="input"
         type="text"
@@ -344,7 +344,7 @@ export default function SettingsScreen({ goBack, navigate }: ScreenProps) {
         value={cuisines}
         onChange={(e) => setCuisines(e.target.value)}
         placeholder="e.g. Thai, spicy, seafood"
-        aria-label="Preferred foods, comma separated"
+        aria-label="Favorite foods, comma separated"
       />
 
       <Heading>Voice</Heading>
@@ -382,13 +382,10 @@ export default function SettingsScreen({ goBack, navigate }: ScreenProps) {
         {srStatus}
       </p>
       <SecondaryButton label="Back" onClick={goBack} />
-      <Body style={{ fontSize: 13, color: 'var(--text-secondary)', textAlign: 'center' }}>
-        Usage is recorded to improve the app.
-      </Body>
       <SecondaryButton
         label={confirmSignOut ? 'Confirm sign out' : 'Sign out'}
         tone="danger"
-        hint={confirmSignOut ? 'Tap again to clear your account and return to the login screen' : 'Requires a second tap to confirm'}
+        hint={confirmSignOut ? 'Tap again to sign out' : 'Tap twice to sign out'}
         onClick={async () => {
           if (!confirmSignOut) {
             setConfirmSignOut(true);

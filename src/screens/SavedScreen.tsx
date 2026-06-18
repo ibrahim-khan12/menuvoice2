@@ -25,8 +25,7 @@ export default function SavedScreen({ navigate, goBack }: ScreenProps) {
     if (list.length === 0) {
       speak('No saved restaurants yet. Capture a menu and it will appear here.');
     } else {
-      const names = list.map((r, i) => `${i + 1}: ${r.name}`).join('. ');
-      speak(`You have ${list.length} saved restaurant${list.length === 1 ? '' : 's'}: ${names}.`);
+      speak(`You have ${list.length} saved restaurant${list.length === 1 ? '' : 's'}.`);
     }
   }, [list]);
 
@@ -56,7 +55,7 @@ export default function SavedScreen({ navigate, goBack }: ScreenProps) {
       </p>
 
       {list === null ? (
-        <Body>Loading…</Body>
+        <Body>Loading...</Body>
       ) : list.length === 0 ? (
         <Body>No saved restaurants yet. Capture a menu and it will appear here.</Body>
       ) : (
@@ -76,7 +75,7 @@ export default function SavedScreen({ navigate, goBack }: ScreenProps) {
               <div className="row" style={{ marginTop: 12 }}>
                 <PrimaryButton
                   label="Open"
-                  hint={`Talk to MenuVoice about the menu for ${r.name}`}
+                  hint={`Open the menu for ${r.name}`}
                   onClick={() => {
                     track('saved', 'open', { content: { restaurantName: r.name } });
                     navigate({ name: 'conversation', menu: r.menu, restaurantName: r.name });
@@ -84,8 +83,8 @@ export default function SavedScreen({ navigate, goBack }: ScreenProps) {
                   style={{ flex: 1 }}
                 />
                 <SecondaryButton
-                  label={armedId === r.id ? 'Tap to confirm' : 'Delete'}
-                  hint={armedId === r.id ? `Confirm deleting ${r.name}` : `Delete ${r.name}`}
+                  label={armedId === r.id ? 'Delete again' : 'Delete'}
+                  hint={`Delete ${r.name}`}
                   tone="danger"
                   onClick={() => onDelete(r.id, r.name)}
                   style={{ flex: 1 }}

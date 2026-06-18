@@ -17,9 +17,7 @@ import { cleanName, parseList, normalizeAllergens } from '../util';
 type Step = 'intro' | 'name' | 'allergies';
 
 const INTRO =
-  'Welcome to MenuVoice. Point your camera at any menu, search a restaurant by name, or paste a link. ' +
-  'I will read it aloud and help you decide what to order. ' +
-  'Two quick questions to get started.';
+  'Welcome to MenuVoice. You can scan a menu, search by restaurant name, or paste a menu link. Two quick setup questions to get started.';
 
 export default function OnboardingScreen() {
   const { update } = useProfile();
@@ -32,7 +30,7 @@ export default function OnboardingScreen() {
       case 'intro':
         return INTRO;
       case 'name':
-        return 'First, what should I call you? Tap the button and say your first name.';
+        return 'What should I call you? Tap the button and say your first name.';
       case 'allergies':
         return 'Do you have any food allergies or things you cannot eat? Tap and say them, or say none.';
     }
@@ -75,9 +73,9 @@ export default function OnboardingScreen() {
         <>
           <Body>{INTRO}</Body>
           <PrimaryButton
-            label="Let's begin"
+            label="Start setup"
             onClick={() => setStep('name')}
-            hint="Starts setup. App will speak from here"
+            hint="Start setup"
             style={{ minHeight: 96, marginTop: 32 }}
           />
         </>
@@ -86,7 +84,7 @@ export default function OnboardingScreen() {
       {step === 'name' && (
         <VoiceStep
           question="What should I call you?"
-          help="Tap the button and say your first name, or type it below."
+          help="Say your first name, or type it below."
           placeholder="First name"
           value={name}
           onChange={setName}
@@ -100,7 +98,7 @@ export default function OnboardingScreen() {
       {step === 'allergies' && (
         <VoiceStep
           question="Any food allergies?"
-          help="Tap and say them (e.g. shellfish and peanuts), or say none. You can also type."
+          help="Say them, say none, or type them."
           placeholder="e.g. shellfish, peanuts"
           value={allergiesText}
           onChange={setAllergiesText}
@@ -172,14 +170,14 @@ function VoiceStep({
       const raw = await transcribeAudio(blob);
       const v = transform ? transform(raw) : raw.trim();
       onChange(v);
-      announce(v ? `I heard: ${v}. Tap ${nextLabel}, or speak again to redo.` : 'I didn\'t catch that. Try again, or type it.');
+      announce(v ? `I heard: ${v}. Tap ${nextLabel}, or speak again.` : 'I didn\'t catch that. Try again, or type it.');
     } catch {
       announce('Sorry, I had trouble hearing that. Try again, or type your answer.');
     }
     setRec('idle');
   };
 
-  const micLabel = rec === 'recording' ? 'Listening...' : rec === 'working' ? 'One moment...' : 'Tap and speak';
+  const micLabel = rec === 'recording' ? 'Listening...' : rec === 'working' ? 'One moment...' : 'Speak';
 
   return (
     <div className="col">
@@ -188,7 +186,7 @@ function VoiceStep({
 
       <PrimaryButton
         label={micLabel}
-        hint="Records your spoken answer"
+        hint="Speak your answer"
         onClick={toggleMic}
         disabled={rec !== 'idle'}
         style={{ minHeight: 96, background: rec === 'recording' ? 'var(--success)' : undefined }}
@@ -200,7 +198,7 @@ function VoiceStep({
         value={value}
         onChange={(e) => onChange(e.target.value)}
         placeholder={placeholder}
-        aria-label={`${question}. Or type here`}
+        aria-label={`${question}. Type your answer here`}
         onKeyDown={(e) => {
           if (e.key === 'Enter') onNext();
         }}

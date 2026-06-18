@@ -126,7 +126,7 @@ export default function LoginScreen() {
   };
 
   const micLabel =
-    rec === 'recording' ? 'Done speaking' : rec === 'working' ? 'One moment…' : 'Say your email';
+    rec === 'recording' ? 'Done speaking' : rec === 'working' ? 'One moment...' : 'Say your email';
 
   return (
     <Screen>
@@ -154,7 +154,7 @@ export default function LoginScreen() {
               }}
               aria-label="Sign in with email instead of Google"
             >
-              Use email instead
+              Use email
             </button>
           )}
         </div>
@@ -165,13 +165,13 @@ export default function LoginScreen() {
         <>
           <Body>
             {profile.email
-              ? `Your saved email is ${profile.email}. Tap Login to continue.`
+              ? `Saved email: ${profile.email}.`
               : 'Say or type your email address, then tap Login.'}
           </Body>
 
           <PrimaryButton
             label={micLabel}
-            hint="Tap to speak your email address"
+            hint="Speak your email address"
             onClick={toggleMic}
             disabled={rec === 'working'}
             style={{ minHeight: 96, background: rec === 'recording' ? 'var(--success)' : undefined }}
@@ -183,7 +183,7 @@ export default function LoginScreen() {
             value={email}
             onChange={(e) => setEmail(e.target.value)}
             placeholder="Email address"
-            aria-label="Email address — type or speak it"
+            aria-label="Email address. Type it or speak it"
             autoComplete="email"
             onKeyDown={(e) => { if (e.key === 'Enter') loginWithEmail(email); }}
           />
@@ -191,7 +191,7 @@ export default function LoginScreen() {
           <PrimaryButton
             label="Login"
             onClick={() => loginWithEmail(email)}
-            hint="Save your email and continue"
+            hint="Continue with this email"
           />
         </>
       )}

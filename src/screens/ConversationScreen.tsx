@@ -451,8 +451,8 @@ export default function ConversationScreen({
     switch (phase) {
       case 'speaking':
         return {
-          label: 'Stop and talk',
-          hint: 'Interrupt and start speaking',
+          label: 'Interrupt and talk',
+          hint: 'Stop MenuVoice and start speaking',
           unavailable: false,
           onClick: interruptAndListen,
         };
@@ -465,15 +465,15 @@ export default function ConversationScreen({
         };
       case 'recording':
         return {
-          label: "Tap when you're done",
-          hint: 'Submit what you just said without waiting',
+          label: 'Done talking',
+          hint: 'Send what you just said',
           unavailable: false,
           onClick: () => speechManagerRef.current?.submitNow(),
         };
       case 'thinking':
       case 'transcribing':
         return {
-          label: 'One moment…',
+          label: 'One moment...',
           hint: '',
           unavailable: true,
           onClick: () => {},
@@ -618,8 +618,8 @@ export default function ConversationScreen({
       </button>
 
       <SecondaryButton
-        label={saving ? 'Saving preferences…' : 'Done'}
-        hint="Save what you decided and return home"
+        label={saving ? 'Saving...' : 'Done'}
+        hint="Return to the home screen"
         onClick={finish}
         disabled={saving}
       />
@@ -633,11 +633,11 @@ export default function ConversationScreen({
 
 function indicatorFor(phase: Phase): { label: string } {
   switch (phase) {
-    case 'speaking':     return { label: 'MenuVoice is speaking…' };
+    case 'speaking':     return { label: 'MenuVoice is speaking...' };
     case 'idle':         return { label: 'Your turn. Tap to talk' };
-    case 'recording':    return { label: 'Listening. Tap when you\'re done' };
-    case 'transcribing': return { label: 'Hearing you…' };
-    case 'thinking':     return { label: 'Thinking…' };
+    case 'recording':    return { label: 'Listening. Tap Done talking when finished' };
+    case 'transcribing': return { label: 'Hearing you...' };
+    case 'thinking':     return { label: 'Thinking...' };
     case 'error':        return { label: 'Something needs your attention' };
   }
 }
