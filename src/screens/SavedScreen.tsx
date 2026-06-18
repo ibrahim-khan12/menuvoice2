@@ -65,6 +65,7 @@ export default function SavedScreen({ navigate, goBack }: ScreenProps) {
             <div
               key={r.id}
               className="card"
+              role="group"
               aria-label={`${i + 1}: ${r.name}, captured ${formatDate(r.capturedAt)}`}
             >
               <div style={{ fontSize: 13, color: 'var(--text-muted)', fontWeight: 700 }}>#{i + 1}</div>

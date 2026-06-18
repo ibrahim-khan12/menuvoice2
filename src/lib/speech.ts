@@ -4,6 +4,8 @@
 import { synthesizeSpeech, hasApiKey } from './openai';
 import { track } from './telemetry';
 
+const AUDIO_PROVIDER = import.meta.env.VITE_AUDIO_PROVIDER ?? 'openai';
+
 // Monotonic counter. stopSpeaking() increments it, invalidating every in-flight
 // playback path in one atomic move — structural guarantee against overlap.
 let speechEpoch = 0;
@@ -196,6 +198,26 @@ export function createStreamingSpeech(
   // Capture epoch at creation. Any stopSpeaking() call after this point
   // increments speechEpoch, making myEpoch !== speechEpoch — drain bails out.
   const myEpoch = speechEpoch;
+
+  if (AUDIO_PROVIDER === 'cartesia') {
+    let fullText = '';
+    let spoken = false;
+    return {
+      push(delta: string) {
+        if (myEpoch !== speechEpoch) return;
+        fullText += delta;
+      },
+      async finish() {
+        if (myEpoch !== speechEpoch || spoken) return;
+        spoken = true;
+        const text = fullText.trim();
+        if (!text) return;
+        opts?.onSpeakingStart?.();
+        await playUtterance(text, voice, myEpoch);
+      },
+    };
+  }
+
   let buffer = '';
   let cancelled = false;
   let firstSpoken = false;

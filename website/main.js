@@ -3,6 +3,49 @@
   'use strict';
 
   var reduce = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  var SITE_SESSION_KEY = 'menuvoice_site_session_id';
+
+  function siteSessionId() {
+    try {
+      var existing = window.localStorage.getItem(SITE_SESSION_KEY);
+      if (existing) return existing;
+      var id = 'site_' + Date.now().toString(36) + '_' + Math.random().toString(36).slice(2, 10);
+      window.localStorage.setItem(SITE_SESSION_KEY, id);
+      return id;
+    } catch (_) {
+      return 'site_' + Date.now().toString(36) + '_' + Math.random().toString(36).slice(2, 10);
+    }
+  }
+
+  function trackSite(eventName, metadata) {
+    try {
+      fetch('/api/activity', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        keepalive: true,
+        body: JSON.stringify({
+          event_name: eventName,
+          session_id: siteSessionId(),
+          path: window.location.pathname + window.location.search,
+          referrer: document.referrer || '',
+          metadata: metadata || {}
+        })
+      }).catch(function () {});
+    } catch (_) {}
+  }
+
+  function trackSiteVisitOncePerDay() {
+    var today = new Date().toISOString().slice(0, 10);
+    try {
+      var key = 'menuvoice_site_visit_day';
+      if (window.localStorage.getItem(key) === today) return;
+      window.localStorage.setItem(key, today);
+    } catch (_) {}
+    trackSite('page_view', {
+      title: document.title,
+      utm_source: new URLSearchParams(window.location.search).get('utm_source') || ''
+    });
+  }
 
   /* ═══ Canvas oscilloscope waveform ═══════════════════════════════════ */
   function initWave(canvas, opts) {
@@ -356,6 +399,7 @@
     var form = document.getElementById('waitlist-form');
     var msg  = document.getElementById('cta-msg');
     if (!form) return;
+    var btn  = form.querySelector('button[type="submit"]');
     form.addEventListener('submit', function (e) {
       e.preventDefault();
       var input = document.getElementById('email');
@@ -365,16 +409,46 @@
         msg.textContent = 'Please enter a valid email address.';
         input.focus(); return;
       }
-      msg.style.color = 'var(--success)';
-      msg.textContent = 'Thanks \u2014 you\u2019re on the list. We\u2019ll be in touch personally.';
-      form.reset();
+      if (btn) { btn.disabled = true; btn.textContent = 'Sending\u2026'; }
+      msg.style.color = 'var(--text-muted)';
+      msg.textContent = '';
+      fetch('/api/waitlist', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          email: val,
+          session_id: siteSessionId(),
+          path: window.location.pathname + window.location.search,
+          referrer: document.referrer || ''
+        })
+      })
+      .then(function (r) { return r.json(); })
+      .then(function (data) {
+        if (data.ok) {
+          msg.style.color = 'var(--success)';
+          msg.textContent = 'You\u2019re on the list. We\u2019ll be in touch personally.';
+          form.reset();
+        } else { throw new Error(data.error || 'error'); }
+      })
+      .catch(function () {
+        msg.style.color = 'var(--danger)';
+        msg.textContent = 'Something went wrong. Please try again.';
+      })
+      .finally(function () {
+        if (btn) { btn.disabled = false; btn.textContent = 'Request a demo'; }
+      });
     });
+  }
+
+  function initSiteTracking() {
+    trackSiteVisitOncePerDay();
   }
 
   /* ═══ Boot ══════════════════════════════════════════════════════════ */
   function init() {
     initReveal();
     initHeader();
+    initSiteTracking();
     initForm();
 
     initWave(document.getElementById('hero-canvas'), {

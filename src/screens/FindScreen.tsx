@@ -31,10 +31,41 @@ function looksLikeUrl(s: string): boolean {
   return /^[^\s]+\.[a-z]{2,}(\/|\?|$)/i.test(t);
 }
 
+const STATE_NAMES: Record<string, string> = {
+  alabama: 'AL', alaska: 'AK', arizona: 'AZ', arkansas: 'AR', california: 'CA',
+  colorado: 'CO', connecticut: 'CT', delaware: 'DE', florida: 'FL', georgia: 'GA',
+  hawaii: 'HI', idaho: 'ID', illinois: 'IL', indiana: 'IN', iowa: 'IA',
+  kansas: 'KS', kentucky: 'KY', louisiana: 'LA', maine: 'ME', maryland: 'MD',
+  massachusetts: 'MA', michigan: 'MI', minnesota: 'MN', mississippi: 'MS',
+  missouri: 'MO', montana: 'MT', nebraska: 'NE', nevada: 'NV',
+  'new hampshire': 'NH', 'new jersey': 'NJ', 'new mexico': 'NM', 'new york': 'NY',
+  'north carolina': 'NC', 'north dakota': 'ND', ohio: 'OH', oklahoma: 'OK',
+  oregon: 'OR', pennsylvania: 'PA', 'rhode island': 'RI',
+  'south carolina': 'SC', 'south dakota': 'SD', tennessee: 'TN', texas: 'TX',
+  utah: 'UT', vermont: 'VT', virginia: 'VA', washington: 'WA',
+  'west virginia': 'WV', wisconsin: 'WI', wyoming: 'WY',
+};
+
+function normalizeRestaurantQuery(raw: string): string {
+  const t = raw.trim().replace(/\s+/g, ' ');
+  if (t.includes(',')) return t;
+  for (const [name, abbr] of Object.entries(STATE_NAMES)) {
+    const re = new RegExp(`\\s+${name}$`, 'i');
+    if (re.test(t)) return t.replace(re, `, ${abbr}`);
+  }
+  if (/\s+[A-Za-z]{2}$/.test(t)) {
+    return t.replace(/\s+([A-Za-z]{2})$/, (_, state: string) => `, ${state.toUpperCase()}`);
+  }
+  return t;
+}
+
+type PendingMatch = Awaited<ReturnType<typeof findMenuByName>> & { requestedName: string };
+
 export default function FindScreen({ navigate, goBack }: ScreenProps) {
   const [query, setQuery] = useState('');
   const [status, setStatus] = useState('');
   const [loading, setLoading] = useState(false);
+  const [pendingMatch, setPendingMatch] = useState<PendingMatch | null>(null);
   const reassureRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const inFlightRef = useRef(false);
 
@@ -55,17 +86,13 @@ export default function FindScreen({ navigate, goBack }: ScreenProps) {
     if (inFlightRef.current) return; // a search is already running
     const trimmed = query.trim();
     if (!trimmed) { announce('Please type a restaurant name or paste a link first.'); return; }
+    setPendingMatch(null);
     if (!hasApiKey()) {
       announce('No API key configured. Set OPENAI_API_KEY in Vercel environment variables.');
       return;
     }
 
     const isUrl = looksLikeUrl(trimmed);
-
-    if (!isUrl && !trimmed.includes(',')) {
-      announce('Please include the city so I find the right location. For example: Burger Bros, Springfield.');
-      return;
-    }
 
     inFlightRef.current = true;
     setLoading(true);
@@ -84,19 +111,22 @@ export default function FindScreen({ navigate, goBack }: ScreenProps) {
       }
 
       // A restaurant name — web search can be slow, so reassure periodically.
-      track('find', 'search_start', { content: { query: trimmed } });
-      announce(`Searching for ${trimmed} and their menu. This can take up to a minute.`);
+      const normalized = normalizeRestaurantQuery(trimmed);
+      track('find', 'search_start', { content: { query: normalized } });
+      announce(`Searching for ${normalized} and their menu. This can take up to a minute.`);
       let i = 0;
       reassureRef.current = setInterval(() => {
         announce(SEARCH_PHRASES[i % SEARCH_PHRASES.length]);
         i++;
       }, 9000);
 
-      const { menu, restaurantName, sourceUrl } = await findMenuByName(trimmed);
+      const result = await findMenuByName(normalized);
       if (reassureRef.current) clearInterval(reassureRef.current);
-      const name = restaurantName?.trim() || trimmed;
-      await saveRestaurant(name, menu, sourceUrl).catch(() => {});
-      navigate({ name: 'conversation', menu, restaurantName: name, source: 'find' });
+      const name = result.restaurantName?.trim() || normalized;
+      setPendingMatch({ ...result, requestedName: normalized });
+      inFlightRef.current = false;
+      setLoading(false);
+      announce(`I found ${name}. Is this the restaurant you want?`);
     } catch (e: any) {
       if (reassureRef.current) clearInterval(reassureRef.current);
       inFlightRef.current = false;
@@ -108,12 +138,24 @@ export default function FindScreen({ navigate, goBack }: ScreenProps) {
     }
   };
 
+  const confirmMatch = async () => {
+    if (!pendingMatch) return;
+    const name = pendingMatch.restaurantName?.trim() || pendingMatch.requestedName;
+    await saveRestaurant(name, pendingMatch.menu, pendingMatch.sourceUrl).catch(() => {});
+    navigate({ name: 'conversation', menu: pendingMatch.menu, restaurantName: name, source: 'find' });
+  };
+
+  const rejectMatch = () => {
+    setPendingMatch(null);
+    announce('Okay. Edit the restaurant name or location and search again.');
+  };
+
   return (
     <Screen>
       <Title>Find a menu</Title>
       <Body>
-        Type a restaurant name and city (for example: Burger Bros, Springfield), or paste a website link or PDF.
-        The city is required so I find the right location.
+        Type a restaurant name and city, or paste a website link or PDF.
+        If the location is unclear, I will ask you to clarify.
       </Body>
 
       <input
@@ -137,6 +179,18 @@ export default function FindScreen({ navigate, goBack }: ScreenProps) {
       >
         {status}
       </p>
+
+      {pendingMatch ? (
+        <div className="card" role="group" aria-label="Confirm restaurant match">
+          <p className="body" style={{ marginBottom: 12 }}>
+            I found {pendingMatch.restaurantName?.trim() || pendingMatch.requestedName}. Is this the restaurant you want?
+          </p>
+          <div className="row">
+            <PrimaryButton label="Yes, open this menu" onClick={confirmMatch} />
+            <SecondaryButton label="No, search again" onClick={rejectMatch} />
+          </div>
+        </div>
+      ) : null}
 
       <PrimaryButton
         label={loading ? 'Finding…' : 'Find menu'}

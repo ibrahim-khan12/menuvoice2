@@ -6,6 +6,7 @@
 import { chromium } from '@playwright/test';
 import AxeBuilder from '@axe-core/playwright';
 import { writeFileSync, mkdirSync } from 'fs';
+import { existsSync } from 'fs';
 import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
 
@@ -42,8 +43,8 @@ const SCREENS = [
   { name: 'login',      ls: {} },
   { name: 'onboarding', ls: { 'menuvoice.profile.v1': JSON.stringify({ ...JSON.parse(PROFILE), onboarded: false }) } },
   { name: 'home',       ls: { 'menuvoice.profile.v1': PROFILE } },
-  { name: 'capture',    ls: { 'menuvoice.profile.v1': PROFILE }, click: 'New Restaurant' },
-  { name: 'url',        ls: { 'menuvoice.profile.v1': PROFILE }, click: 'Menu from Website' },
+  { name: 'capture',    ls: { 'menuvoice.profile.v1': PROFILE }, click: 'Scan a Menu' },
+  { name: 'find',       ls: { 'menuvoice.profile.v1': PROFILE }, click: 'Find a Menu' },
   { name: 'saved',      ls: { 'menuvoice.profile.v1': PROFILE, 'menuvoice.savedRestaurants.v1': SAVED }, click: 'My Saved Restaurants' },
   { name: 'settings',   ls: { 'menuvoice.profile.v1': PROFILE }, click: 'Settings' },
 ];
@@ -128,11 +129,15 @@ async function auditScreen(browser, screen) {
 async function main() {
   console.log('Starting MenuVoice WCAG 2.1 AA audit…\n');
 
-  const browser = await chromium.launch({
-    executablePath: CHROMIUM_PATH,
+  const launchOptions = {
     headless: true,
     args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage'],
-  });
+  };
+  if (existsSync(CHROMIUM_PATH)) {
+    launchOptions.executablePath = CHROMIUM_PATH;
+  }
+
+  const browser = await chromium.launch(launchOptions);
 
   const allViolations = [];
   const summary = [];

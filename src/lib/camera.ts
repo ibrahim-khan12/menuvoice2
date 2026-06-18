@@ -67,8 +67,49 @@ export function stopCamera(stream: MediaStream | null) {
   stream?.getTracks().forEach((t) => t.stop());
 }
 
+export interface ZoomRange {
+  min: number;
+  max: number;
+  step: number;
+  value: number;
+  native: boolean;
+}
+
+export function getZoomRange(stream: MediaStream | null): ZoomRange {
+  const fallback = { min: 1, max: 3, step: 0.25, value: 1, native: false };
+  try {
+    const track = stream?.getVideoTracks()[0];
+    if (!track) return fallback;
+    const caps = (track.getCapabilities as any)?.() as any;
+    const settings = (track.getSettings as any)?.() as any;
+    if (!caps?.zoom) return fallback;
+    return {
+      min: Number(caps.zoom.min ?? 1),
+      max: Number(caps.zoom.max ?? 3),
+      step: Number(caps.zoom.step ?? 0.25),
+      value: Number(settings?.zoom ?? caps.zoom.min ?? 1),
+      native: true,
+    };
+  } catch {
+    return fallback;
+  }
+}
+
+export async function setZoom(stream: MediaStream | null, value: number): Promise<boolean> {
+  try {
+    const track = stream?.getVideoTracks()[0];
+    if (!track) return false;
+    const caps = (track.getCapabilities as any)?.() as any;
+    if (!caps?.zoom) return false;
+    await track.applyConstraints({ advanced: [{ zoom: value } as any] });
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 /** Grab the current video frame as a base64 JPEG (no data: prefix). */
-export function captureFrame(video: HTMLVideoElement, quality = 0.6): string | null {
+export function captureFrame(video: HTMLVideoElement, quality = 0.6, fallbackZoom = 1): string | null {
   const w = video.videoWidth;
   const h = video.videoHeight;
   if (!w || !h) return null;
@@ -77,7 +118,16 @@ export function captureFrame(video: HTMLVideoElement, quality = 0.6): string | n
   canvas.height = h;
   const ctx = canvas.getContext('2d');
   if (!ctx) return null;
-  ctx.drawImage(video, 0, 0, w, h);
+  const zoom = Math.max(1, fallbackZoom);
+  if (zoom === 1) {
+    ctx.drawImage(video, 0, 0, w, h);
+  } else {
+    const sw = w / zoom;
+    const sh = h / zoom;
+    const sx = (w - sw) / 2;
+    const sy = (h - sh) / 2;
+    ctx.drawImage(video, sx, sy, sw, sh, 0, 0, w, h);
+  }
   const dataUrl = canvas.toDataURL('image/jpeg', quality);
   return dataUrl.split(',')[1] ?? null;
 }

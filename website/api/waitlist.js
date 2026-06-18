@@ -12,9 +12,21 @@ export default async function handler(req, res) {
 
   try {
     const ts = new Date().toISOString();
+    const sessionId = typeof req.body?.session_id === 'string' ? req.body.session_id.slice(0, 128) : null;
+    const path = typeof req.body?.path === 'string' ? req.body.path.slice(0, 256) : null;
+    const referrer = typeof req.body?.referrer === 'string' ? req.body.referrer.slice(0, 512) : null;
+    const userAgent = typeof req.headers['user-agent'] === 'string' ? req.headers['user-agent'].slice(0, 512) : null;
+    const record = { email, ts, session_id: sessionId, path, referrer, user_agent: userAgent };
+
     await redis.sadd('menuvoice:waitlist', email);
-    await redis.lpush('menuvoice:waitlist:log', JSON.stringify({ email, ts }));
+    await redis.lpush('menuvoice:waitlist:log', JSON.stringify(record));
     await redis.ltrim('menuvoice:waitlist:log', 0, 9999);
+    await redis.lpush('menuvoice:site:events', JSON.stringify({
+      ...record,
+      event_name: 'waitlist_submit',
+      metadata: { email },
+    }));
+    await redis.ltrim('menuvoice:site:events', 0, 9999);
 
     return res.status(200).json({ ok: true });
   } catch (error) {

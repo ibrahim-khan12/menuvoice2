@@ -2,6 +2,7 @@
 // Used by api/morning.ts (on-demand view) and api/cron-morning.ts (daily email).
 // Underscore prefix => Vercel does not expose this as an HTTP route.
 
+import { Redis } from '@upstash/redis';
 import { createClient } from '@vercel/postgres';
 // nodemailer is imported lazily inside sendEmail() (its only use). A top-level
 // import pulls it into module load for EVERY consumer of this file — including the
@@ -25,6 +26,43 @@ export interface UserRow {
   is_new: boolean;
 }
 
+export interface FunnelStage {
+  key: string;
+  label: string;
+  count: number;
+  prev: number;
+}
+
+export interface FunnelFailure {
+  key: string;
+  label: string;
+  count: number;
+  prev: number;
+}
+
+export interface Funnel {
+  sessions: number;
+  prevSessions: number;
+  stages: FunnelStage[];
+  failures: FunnelFailure[];
+  biggestLeak: { fromLabel: string; toLabel: string; lost: number; pct: number } | null;
+}
+
+export interface WebsiteSignup {
+  email: string;
+  ts: string;
+  referrer?: string | null;
+}
+
+export interface WebsiteReport {
+  available: boolean;
+  visits: number;
+  sessions: number;
+  signups: number;
+  referrers: { referrer: string; count: number }[];
+  latestSignups: WebsiteSignup[];
+}
+
 export interface MorningData {
   windowLabel: string;
   hours: number;
@@ -39,6 +77,8 @@ export interface MorningData {
   // so each report can show what changed vs "yesterday" and never reads identical.
   prev: { users: number; sessions: number; events: number; newUsers: number };
   deltas: { users: number; sessions: number; events: number; newUsers: number };
+  funnel: Funnel;
+  website: WebsiteReport;
 }
 
 // Accounts we never want to see in the report (own testing). Override with the
@@ -46,6 +86,70 @@ export interface MorningData {
 export function excludeList(): string[] {
   const raw = process.env.REPORT_EXCLUDE_EMAILS ?? '2firemaster27@gmail.com,avitaldrel@gmail.com';
   return raw.split(',').map((e) => e.trim().toLowerCase()).filter(Boolean);
+}
+
+const STAGE_DEFS: { key: string; label: string }[] = [
+  { key: 'sessions', label: 'Session started' },
+  { key: 'camera',   label: 'Camera opened' },
+  { key: 'photo',    label: 'Photo captured' },
+  { key: 'analyze',  label: 'Analysis started' },
+  { key: 'ocr',      label: 'Menu extracted' },
+  { key: 'answered', label: 'Got an answer' },
+  { key: 'saved',    label: 'Restaurant saved' },
+];
+
+const FAIL_DEFS: { key: string; label: string }[] = [
+  { key: 'fail_camera', label: 'camera' },
+  { key: 'fail_ocr',    label: 'OCR' },
+  { key: 'fail_ask',    label: 'ask' },
+  { key: 'fail_stt',    label: 'speech' },
+];
+
+async function queryFunnelRow(
+  client: ReturnType<typeof createClient>,
+  exclude: string[],
+  windowSql: string,
+): Promise<Record<string, number>> {
+  const q = await client.query(
+    `WITH sess AS (
+       SELECT session_id,
+              bool_or(lower(user_email) = ANY($1::text[]))                       AS internal,
+              bool_or(event_name='camera_start' AND outcome IS DISTINCT FROM 'failure') AS r_camera,
+              bool_or(event_name='photo_added')                                  AS r_photo,
+              bool_or(event_name='analyze_start')                                AS r_analyze,
+              bool_or(event_name='ocr_result' AND outcome IS DISTINCT FROM 'failure')   AS r_ocr,
+              bool_or(event_name='llm_reply')                                    AS r_answered,
+              bool_or(event_name='saved')                                        AS r_saved
+       FROM events
+       WHERE ${windowSql}
+       GROUP BY session_id
+     ),
+     fails AS (
+       SELECT
+         count(*) FILTER (WHERE event_name='camera_start' AND outcome='failure') AS fail_camera,
+         count(*) FILTER (WHERE event_name='ocr_result'   AND outcome='failure') AS fail_ocr,
+         count(*) FILTER (WHERE event_type='ask' AND event_name='error')         AS fail_ask,
+         count(*) FILTER (WHERE event_name='stt_error')                          AS fail_stt
+       FROM events
+       WHERE ${windowSql}
+         AND session_id NOT IN (SELECT session_id FROM sess WHERE internal)
+     )
+     SELECT
+       (SELECT count(*) FROM sess WHERE NOT internal)                 AS sessions,
+       (SELECT count(*) FROM sess WHERE NOT internal AND r_camera)    AS camera,
+       (SELECT count(*) FROM sess WHERE NOT internal AND r_photo)     AS photo,
+       (SELECT count(*) FROM sess WHERE NOT internal AND r_analyze)   AS analyze,
+       (SELECT count(*) FROM sess WHERE NOT internal AND r_ocr)       AS ocr,
+       (SELECT count(*) FROM sess WHERE NOT internal AND r_answered)  AS answered,
+       (SELECT count(*) FROM sess WHERE NOT internal AND r_saved)     AS saved,
+       fails.fail_camera, fails.fail_ocr, fails.fail_ask, fails.fail_stt
+     FROM fails`,
+    [exclude]
+  );
+  const row = q.rows[0] ?? {};
+  const out: Record<string, number> = {};
+  for (const k of Object.keys(row)) out[k] = Number(row[k]) || 0;
+  return out;
 }
 
 export async function withClient<T>(fn: (c: ReturnType<typeof createClient>) => Promise<T>): Promise<T> {
@@ -96,6 +200,97 @@ export function activity(u: UserRow): string {
   return parts.length ? parts.join(' · ') : 'browsed only';
 }
 
+function redisFromEnv(): Redis | null {
+  const url = process.env.UPSTASH_REDIS_REST_URL || process.env.KV_REST_API_URL;
+  const token = process.env.UPSTASH_REDIS_REST_TOKEN || process.env.KV_REST_API_TOKEN;
+  if (!url || !token) return null;
+  return new Redis({ url, token });
+}
+
+function parseJsonRow(value: unknown): Record<string, unknown> | null {
+  if (!value) return null;
+  if (typeof value === 'object') return value as Record<string, unknown>;
+  if (typeof value !== 'string') return null;
+  try {
+    const parsed = JSON.parse(value);
+    return parsed && typeof parsed === 'object' ? parsed : null;
+  } catch {
+    return null;
+  }
+}
+
+function cleanReferrer(value: unknown): string {
+  if (typeof value !== 'string' || !value.trim()) return 'direct';
+  try {
+    const u = new URL(value);
+    return u.hostname || 'direct';
+  } catch {
+    return value.slice(0, 80);
+  }
+}
+
+async function getWebsiteReport(hours: number): Promise<WebsiteReport> {
+  const redis = redisFromEnv();
+  if (!redis) {
+    return { available: false, visits: 0, sessions: 0, signups: 0, referrers: [], latestSignups: [] };
+  }
+
+  const since = Date.now() - hours * 60 * 60 * 1000;
+  try {
+    const raw = await redis.lrange('menuvoice:site:events', 0, 9999);
+    const rows = raw
+      .map(parseJsonRow)
+      .filter((row): row is Record<string, unknown> => {
+        const ts = typeof row?.ts === 'string' ? Date.parse(row.ts) : NaN;
+        return Number.isFinite(ts) && ts > since;
+      });
+
+    const visitRows = rows.filter((row) => row.event_name === 'page_view');
+    const signupRows = rows.filter((row) => row.event_name === 'waitlist_submit');
+    const sessionIds = new Set(
+      rows
+        .map((row) => (typeof row.session_id === 'string' ? row.session_id : ''))
+        .filter(Boolean)
+    );
+
+    const refs = new Map<string, number>();
+    for (const row of visitRows) {
+      const ref = cleanReferrer(row.referrer);
+      refs.set(ref, (refs.get(ref) ?? 0) + 1);
+    }
+
+    const latestSignups = signupRows
+      .map((row) => {
+        const metadata = row.metadata && typeof row.metadata === 'object'
+          ? row.metadata as Record<string, unknown>
+          : {};
+        return {
+          email: typeof row.email === 'string' ? row.email : typeof metadata.email === 'string' ? metadata.email : '',
+          ts: typeof row.ts === 'string' ? row.ts : '',
+          referrer: typeof row.referrer === 'string' ? cleanReferrer(row.referrer) : null,
+        };
+      })
+      .filter((row) => row.email)
+      .sort((a, b) => Date.parse(b.ts) - Date.parse(a.ts))
+      .slice(0, 10);
+
+    return {
+      available: true,
+      visits: visitRows.length,
+      sessions: sessionIds.size,
+      signups: signupRows.length,
+      referrers: Array.from(refs.entries())
+        .map(([referrer, count]) => ({ referrer, count }))
+        .sort((a, b) => b.count - a.count)
+        .slice(0, 5),
+      latestSignups,
+    };
+  } catch (err) {
+    console.error('[morning] website report unavailable:', err);
+    return { available: false, visits: 0, sessions: 0, signups: 0, referrers: [], latestSignups: [] };
+  }
+}
+
 export async function buildMorningReport(hours: number): Promise<MorningData> {
   hours = Math.min(Math.max(hours, 1), 24 * 365);
   const exclude = excludeList();
@@ -108,6 +303,7 @@ export async function buildMorningReport(hours: number): Promise<MorningData> {
   const notExcluded = `lower(user_email) <> ALL($1::text[])`;
 
   return withClient(async (client) => {
+    const websitePromise = getWebsiteReport(hours);
     const users = await client.query(
       `WITH win AS (
          SELECT user_email,
@@ -163,6 +359,12 @@ export async function buildMorningReport(hours: number): Promise<MorningData> {
       [exclude]
     );
 
+    const [curF, prevF] = await Promise.all([
+      queryFunnelRow(client, exclude, `ts > ${w}`),
+      queryFunnelRow(client, exclude,
+        `ts > now() - interval '${hours * 2} hours' AND ts <= now() - interval '${hours} hours'`),
+    ]);
+
     const rows = users.rows as UserRow[];
     const num = (v: unknown) => Number(v) || 0;
     const totals = {
@@ -189,17 +391,43 @@ export async function buildMorningReport(hours: number): Promise<MorningData> {
       newUsers: newUsers.length - prev.newUsers,
     };
 
+    const stages: FunnelStage[] = STAGE_DEFS.map((def) => ({
+      key: def.key, label: def.label, count: curF[def.key] ?? 0, prev: prevF[def.key] ?? 0,
+    }));
+    const failures: FunnelFailure[] = FAIL_DEFS.map((def) => ({
+      key: def.key, label: def.label, count: curF[def.key] ?? 0, prev: prevF[def.key] ?? 0,
+    }));
+
+    let biggestLeak: Funnel['biggestLeak'] = null;
+    for (let i = 1; i < stages.length; i++) {
+      const from = stages[i - 1], to = stages[i];
+      if (from.count <= 0) continue;
+      const lost = from.count - to.count;
+      if (lost > 0 && (!biggestLeak || lost > biggestLeak.lost)) {
+        biggestLeak = { fromLabel: from.label, toLabel: to.label, lost, pct: lost / from.count };
+      }
+    }
+
+    const funnel: Funnel = {
+      sessions: curF.sessions ?? 0,
+      prevSessions: prevF.sessions ?? 0,
+      stages, failures, biggestLeak,
+    };
+    const website = await websitePromise;
+
     return {
       windowLabel,
       hours,
       generated: fmtTs(new Date().toISOString()),
-      anyoneUsed: rows.length > 0,
+      anyoneUsed: rows.length > 0 || website.visits > 0 || website.signups > 0,
       totals,
       newUsers,
       returningUsers: rows.filter((u) => !u.is_new),
       excluded: exclude,
       prev,
       deltas,
+      funnel,
+      website,
     };
   });
 }
@@ -220,18 +448,68 @@ function signed(n: number): string {
   return '±0';
 }
 
+function pct(n: number, d: number): string {
+  return d > 0 ? `${Math.round((n / d) * 100)}%` : '0%';
+}
+
+export function renderFunnelText(f: Funnel): string {
+  if (f.sessions <= 0) return '';
+  const lines: string[] = [];
+  lines.push('WHERE SESSIONS DROPPED OFF:');
+  for (const s of f.stages) {
+    const delta = s.count - s.prev;
+    const pctStr = s.key === 'sessions' ? '' : `  (${pct(s.count, f.sessions)})`;
+    lines.push(`  ${s.label.padEnd(18)} ${String(s.count).padStart(3)}${pctStr}   ${signed(delta)} vs prev`);
+  }
+  if (f.biggestLeak) {
+    const b = f.biggestLeak;
+    lines.push(`  Biggest drop-off: ${b.fromLabel} to ${b.toLabel} (lost ${b.lost}, ${Math.round(b.pct * 100)}%)`);
+  }
+  const fail = f.failures
+    .map((x) => `${x.label} ${x.count} (${signed(x.count - x.prev)})`)
+    .join(' . ');
+  lines.push(`  Failures: ${fail}`);
+  return lines.join('\n');
+}
+
+export function renderWebsiteText(w: WebsiteReport): string {
+  if (!w.available) return 'WEBSITE:\n  Not connected to the waitlist Redis store in this deployment.';
+  const lines: string[] = [];
+  lines.push('WEBSITE:');
+  lines.push(`  ${w.visits} visit(s), ${w.sessions} site session(s), ${w.signups} waitlist/demo request(s)`);
+  if (w.referrers.length) {
+    lines.push(`  Referrers: ${w.referrers.map((r) => `${r.referrer} ${r.count}`).join(', ')}`);
+  }
+  if (w.latestSignups.length) {
+    lines.push('  Latest signups:');
+    for (const s of w.latestSignups) {
+      lines.push(`  - ${s.email}  |  ${fmtTs(s.ts)}${s.referrer ? `  |  ${s.referrer}` : ''}`);
+    }
+  }
+  return lines.join('\n');
+}
+
 export function renderText(d: MorningData): string {
   const t = d.totals;
   const lines: string[] = [];
+  const appUsed = t.users > 0;
   lines.push(`MenuVoice morning report  (${d.windowLabel})`);
   lines.push(`generated ${d.generated}`);
   lines.push('');
   if (!d.anyoneUsed) {
     lines.push('No one used MenuVoice in this window.');
   } else {
-    lines.push(`Yes, MenuVoice was used by ${t.users} ${t.users === 1 ? 'person' : 'people'}.`);
-    lines.push(`  ${t.sessions} session(s), ${t.events} event(s), ${t.failures} failure(s)`);
-    lines.push(`  vs ${comparePeriod(d)}: users ${signed(d.deltas.users)}, actions ${signed(d.deltas.events)}, new users ${signed(d.deltas.newUsers)}`);
+    if (appUsed) {
+      lines.push(`Yes, the MenuVoice app was used by ${t.users} ${t.users === 1 ? 'person' : 'people'}.`);
+      lines.push(`  ${t.sessions} session(s), ${t.events} event(s), ${t.failures} failure(s)`);
+      lines.push(`  vs ${comparePeriod(d)}: users ${signed(d.deltas.users)}, actions ${signed(d.deltas.events)}, new users ${signed(d.deltas.newUsers)}`);
+      const funnelTxt = renderFunnelText(d.funnel);
+      if (funnelTxt) { lines.push(''); lines.push(funnelTxt); }
+    } else {
+      lines.push('No identified users used the MenuVoice app in this window.');
+    }
+    lines.push('');
+    lines.push(renderWebsiteText(d.website));
     lines.push('');
     lines.push(`NEW users (${d.newUsers.length}):`);
     if (!d.newUsers.length) lines.push('  (none)');
@@ -280,22 +558,122 @@ function userCard(u: UserRow, kind: 'new' | 'returning'): string {
   </td></tr>`;
 }
 
+export function renderFunnelHtml(f: Funnel, ff: string): string {
+  if (f.sessions <= 0) return '';
+
+  const deltaChip = (n: number) => {
+    const up = n > 0, down = n < 0;
+    const fg = up ? C.greenDk : down ? C.red : C.sub;
+    const arrow = up ? '&#9650;' : down ? '&#9660;' : '&#8211;';
+    const val = n === 0 ? '0' : `${n > 0 ? '+' : ''}${n}`;
+    return `<span style="font-size:11px;font-weight:700;color:${fg};white-space:nowrap">${arrow} ${val}</span>`;
+  };
+
+  const rows = f.stages.map((s) => {
+    const p = s.key === 'sessions' ? 100 : (f.sessions > 0 ? Math.round((s.count / f.sessions) * 100) : 0);
+    const delta = s.count - s.prev;
+    const isLeak = !!f.biggestLeak && f.biggestLeak.toLabel === s.label;
+    const barColor = isLeak ? C.red : C.green;
+    return `
+    <tr>
+      <td style="padding:5px 8px 5px 0;font-family:${ff};font-size:13px;color:${C.ink};white-space:nowrap">${esc(s.label)}</td>
+      <td style="padding:5px 0;width:100%">
+        <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:${C.bg};border-radius:6px">
+          <tr><td style="width:${p}%;background:${barColor};border-radius:6px;font-size:0;line-height:0">&nbsp;</td></tr>
+        </table>
+      </td>
+      <td align="right" style="padding:5px 0 5px 10px;font-family:${ff};font-size:13px;font-weight:700;color:${C.ink};white-space:nowrap">${s.count}<span style="color:${C.sub};font-weight:600;font-size:11px"> ${s.key === 'sessions' ? '' : `&middot; ${p}%`}</span></td>
+      <td align="right" style="padding:5px 0 5px 10px;white-space:nowrap">${deltaChip(delta)}</td>
+    </tr>`;
+  }).join('');
+
+  const leak = f.biggestLeak
+    ? `<div style="margin-top:8px;font-family:${ff};font-size:12px;color:${C.amber}">
+         Biggest drop-off: <strong>${esc(f.biggestLeak.fromLabel)}</strong> to <strong>${esc(f.biggestLeak.toLabel)}</strong>
+         (lost ${f.biggestLeak.lost}, ${Math.round(f.biggestLeak.pct * 100)}%)
+       </div>`
+    : '';
+
+  const failChips = f.failures.map((x) => {
+    const delta = x.count - x.prev;
+    const fg = delta > 0 ? C.red : C.sub;
+    return `<span style="display:inline-block;font-family:${ff};font-size:12px;color:${C.ink};margin-right:14px">
+      ${esc(x.label)} <strong>${x.count}</strong> <span style="color:${fg};font-size:11px">(${delta === 0 ? '0' : `${delta > 0 ? '+' : ''}${delta}`})</span>
+    </span>`;
+  }).join('');
+
+  return `
+  <tr><td style="padding:26px 0 8px;font-family:${ff};font-size:15px;font-weight:800;color:${C.ink}">Where sessions dropped off</td></tr>
+  <tr><td>
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:${C.card};border:1px solid ${C.line};border-radius:12px">
+      <tr><td style="padding:14px 16px">
+        <table role="presentation" width="100%" cellpadding="0" cellspacing="0">${rows}</table>
+        ${leak}
+        <div style="margin-top:12px;padding-top:10px;border-top:1px solid ${C.line}">
+          <div style="font-family:${ff};font-size:11px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:${C.sub};margin-bottom:6px">Failures in window</div>
+          ${failChips}
+        </div>
+      </td></tr>
+    </table>
+  </td></tr>`;
+}
+
+export function renderWebsiteHtml(w: WebsiteReport, ff: string): string {
+  const unavailable = !w.available
+    ? `<div style="font-family:${ff};font-size:12px;color:${C.amber};margin-top:8px">Website activity is not connected to the waitlist Redis store in this deployment.</div>`
+    : '';
+  const referrers = w.referrers.length
+    ? `<div style="font-family:${ff};font-size:12px;color:${C.sub};margin-top:8px">Referrers: ${w.referrers.map((r) => `${esc(r.referrer)} ${r.count}`).join(', ')}</div>`
+    : '';
+  const signups = w.latestSignups.length
+    ? `<div style="font-family:${ff};font-size:12px;color:${C.ink};margin-top:10px">
+        <strong>Latest requests:</strong><br>
+        ${w.latestSignups.map((s) => `${esc(s.email)} <span style="color:${C.sub}">${esc(fmtTs(s.ts))}${s.referrer ? ` &middot; ${esc(s.referrer)}` : ''}</span>`).join('<br>')}
+       </div>`
+    : '';
+
+  return `
+  <tr><td style="padding:26px 0 8px;font-family:${ff};font-size:15px;font-weight:800;color:${C.ink}">Public website</td></tr>
+  <tr><td>
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:${C.card};border:1px solid ${C.line};border-radius:12px">
+      <tr><td style="padding:14px 16px">
+        <table role="presentation" width="100%" cellpadding="0" cellspacing="0"><tr>
+          <td style="font-family:${ff};font-size:13px;color:${C.sub};padding-right:10px"><div style="font-size:26px;font-weight:800;color:${C.ink};line-height:1">${w.visits}</div>visits</td>
+          <td style="font-family:${ff};font-size:13px;color:${C.sub};padding-right:10px"><div style="font-size:26px;font-weight:800;color:${C.ink};line-height:1">${w.sessions}</div>site sessions</td>
+          <td style="font-family:${ff};font-size:13px;color:${C.sub}"><div style="font-size:26px;font-weight:800;color:${C.greenDk};line-height:1">${w.signups}</div>requests</td>
+        </tr></table>
+        ${unavailable}
+        ${referrers}
+        ${signups}
+      </td></tr>
+    </table>
+  </td></tr>`;
+}
+
 export function renderEmailHtml(d: MorningData, dashboardUrl?: string): string {
   const t = d.totals;
   const ff = 'Segoe UI,system-ui,-apple-system,Roboto,Helvetica,Arial,sans-serif';
+  const appUsed = t.users > 0;
 
-  const verdict = d.anyoneUsed
+  const verdict = !d.anyoneUsed
+    ? `<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:${C.redBg};border:1px solid ${C.red};border-radius:12px">
+         <tr><td style="padding:16px 18px;font-family:${ff}">
+           <div style="font-size:13px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:${C.red}">Quiet window</div>
+           <div style="font-size:20px;font-weight:800;color:${C.ink};margin-top:2px">No app or website activity</div>
+         </td></tr>
+       </table>`
+    : appUsed
     ? `<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:${C.greenBg};border:1px solid ${C.green};border-radius:12px">
          <tr><td style="padding:16px 18px;font-family:${ff}">
-           <div style="font-size:13px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:${C.greenDk}">Yes — people used MenuVoice</div>
+           <div style="font-size:13px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:${C.greenDk}">Yes — people used the app</div>
            <div style="font-size:28px;font-weight:800;color:${C.ink};margin-top:2px">${t.users} ${t.users === 1 ? 'person' : 'people'}</div>
            <div style="font-size:13px;color:${C.sub};margin-top:2px">${t.sessions} session${t.sessions === 1 ? '' : 's'} &middot; ${t.events} action${t.events === 1 ? '' : 's'}${Number(t.failures) > 0 ? ` &middot; <span style="color:${C.red}">${t.failures} failure${t.failures === 1 ? '' : 's'}</span>` : ''}</div>
          </td></tr>
        </table>`
-    : `<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:${C.redBg};border:1px solid ${C.red};border-radius:12px">
+    : `<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:${C.greenBg};border:1px solid ${C.green};border-radius:12px">
          <tr><td style="padding:16px 18px;font-family:${ff}">
-           <div style="font-size:13px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:${C.red}">Quiet window</div>
-           <div style="font-size:20px;font-weight:800;color:${C.ink};margin-top:2px">No one used MenuVoice</div>
+           <div style="font-size:13px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:${C.greenDk}">Website activity</div>
+           <div style="font-size:20px;font-weight:800;color:${C.ink};margin-top:2px">No identified app users in this window</div>
          </td></tr>
        </table>`;
 
@@ -312,7 +690,7 @@ export function renderEmailHtml(d: MorningData, dashboardUrl?: string): string {
       <span style="font-size:11px;color:${C.sub};margin-left:4px">${label}</span>
     </div></td>`;
   };
-  const compareStrip = d.anyoneUsed
+  const compareStrip = appUsed
     ? `<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin:10px -4px 0"><tr>
          <td colspan="3" style="padding:0 4px 6px;font-family:${ff};font-size:11px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:${C.sub}">vs ${comparePeriod(d)}</td>
        </tr><tr>
@@ -365,6 +743,8 @@ export function renderEmailHtml(d: MorningData, dashboardUrl?: string): string {
                 ${tile('Returning users', d.returningUsers.length, C.retBadge)}
               </tr></table>
             </td></tr>
+            ${renderFunnelHtml(d.funnel, ff)}
+            ${renderWebsiteHtml(d.website, ff)}
             ${section('New users', d.newUsers, 'new')}
             ${section('Returning users', d.returningUsers, 'returning')}
             ${dashboardUrl ? `<tr><td style="padding-top:22px" align="center">

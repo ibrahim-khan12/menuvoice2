@@ -28,8 +28,14 @@ export default function SettingsScreen({ goBack, navigate }: ScreenProps) {
   const [dislikes, setDislikes] = useState<string[]>(profile.dislikes);
   const [newDislike, setNewDislike] = useState('');
   const [dislikeRec, setDislikeRec] = useState<RecState>('idle');
+  const [confirmSignOut, setConfirmSignOut] = useState(false);
 
   const [srStatus, setSrStatus] = useState('');
+
+  const announce = (msg: string) => {
+    setSrStatus(msg);
+    speak(msg);
+  };
 
   const persist = async () => {
     // Auto-correct misspelled/misheard allergens before saving — an allergen
@@ -47,8 +53,7 @@ export default function SettingsScreen({ goBack, navigate }: ScreenProps) {
     const msg = allergyList.length
       ? `Saved.${fixNote} I will warn you about ${allergyList.join(', ')}.`
       : 'Saved. No allergies set.';
-    setSrStatus(msg);
-    speak(msg);
+    announce(msg);
     setTimeout(() => setSaved(false), 2000);
   };
 
@@ -56,23 +61,26 @@ export default function SettingsScreen({ goBack, navigate }: ScreenProps) {
     const trimmed = val.trim();
     if (!trimmed || trimmed === profile.name) return;
     await update({ name: trimmed });
-    speak(`Name updated to ${trimmed}.`);
+    announce(`Name updated to ${trimmed}.`);
   };
 
   const speakName = async () => {
     if (nameRec !== 'idle') return;
+    announce('Your browser is asking for microphone permission. Choose Allow so MenuVoice can hear you.');
     const ok = await requestMicPermission();
-    if (!ok) { speak('Microphone access needed. Allow it and try again.'); return; }
+    if (!ok) { announce('Microphone access was not allowed. You can allow it in browser settings, or type instead.'); return; }
     try {
       await startRecording();
       setNameRec('recording');
+      announce('Listening for your name.');
     } catch {
-      speak('Could not start microphone. Try typing instead.');
+      announce('Could not start microphone. Try typing instead.');
       return;
     }
     const s = getActiveStream();
     if (s) await new Promise<void>((resolve) => { watchForSilence(s, 3000, 30000, resolve); });
     setNameRec('working');
+    announce('Transcribing, one moment.');
     let blob: Blob | null = null;
     try { blob = await stopRecording(); } catch {}
     if (!blob) { setNameRec('idle'); return; }
@@ -84,27 +92,32 @@ export default function SettingsScreen({ goBack, navigate }: ScreenProps) {
         if (name) {
           setNameVal(name);
           await update({ name });
-          speak(`Name updated to ${name}.`);
+          announce(`Name updated to ${name}.`);
         }
       }
-    } catch {}
+    } catch {
+      announce('I could not transcribe that. Try typing instead.');
+    }
     setNameRec('idle');
   };
 
   const speakDislike = async () => {
     if (dislikeRec !== 'idle') return;
+    announce('Your browser is asking for microphone permission. Choose Allow so MenuVoice can hear you.');
     const ok = await requestMicPermission();
-    if (!ok) { speak('Microphone access needed. Allow it and try again.'); return; }
+    if (!ok) { announce('Microphone access was not allowed. You can allow it in browser settings, or type instead.'); return; }
     try {
       await startRecording();
       setDislikeRec('recording');
+      announce('Listening for a food you dislike.');
     } catch {
-      speak('Could not start microphone. Try typing instead.');
+      announce('Could not start microphone. Try typing instead.');
       return;
     }
     const s = getActiveStream();
     if (s) await new Promise<void>((resolve) => { watchForSilence(s, 3000, 30000, resolve); });
     setDislikeRec('working');
+    announce('Transcribing, one moment.');
     let blob: Blob | null = null;
     try { blob = await stopRecording(); } catch {}
     if (!blob) { setDislikeRec('idle'); return; }
@@ -118,10 +131,12 @@ export default function SettingsScreen({ goBack, navigate }: ScreenProps) {
           setDislikes(next);
           setNewDislike('');
           await update({ dislikes: next });
-          speak(`Added ${item} to your dislikes.`);
+          announce(`Added ${item} to your dislikes.`);
         }
       }
-    } catch {}
+    } catch {
+      announce('I could not transcribe that. Try typing instead.');
+    }
     setDislikeRec('idle');
   };
 
@@ -164,15 +179,16 @@ export default function SettingsScreen({ goBack, navigate }: ScreenProps) {
       </div>
 
       <Heading>Spice tolerance</Heading>
-      <div className="row" style={{ flexWrap: 'wrap', gap: 8 }}>
+      <div className="row" role="radiogroup" aria-label="Spice tolerance" style={{ flexWrap: 'wrap', gap: 8 }}>
         {SPICE_LEVELS.map((level) => {
           const active = profile.spiceTolerance === level;
           return (
             <button
               key={level}
+              role="radio"
+              aria-checked={active}
               onClick={() => update({ spiceTolerance: level as SpiceLevel })}
               aria-label={`Spice ${level}${active ? ', selected' : ''}`}
-              aria-pressed={active}
               style={{
                 flex: 1,
                 minHeight: 64,
@@ -228,6 +244,7 @@ export default function SettingsScreen({ goBack, navigate }: ScreenProps) {
               setDislikes(next);
               setNewDislike('');
               update({ dislikes: next });
+              announce(`Added ${trimmed} to your dislikes.`);
             }
           }}
           placeholder="Add a dislike (e.g. mushrooms)"
@@ -331,15 +348,16 @@ export default function SettingsScreen({ goBack, navigate }: ScreenProps) {
       />
 
       <Heading>Voice</Heading>
-      <div className="row" style={{ flexWrap: 'wrap' }}>
+      <div className="row" role="radiogroup" aria-label="App voice choice" style={{ flexWrap: 'wrap' }}>
         {VOICES.map((v) => {
           const active = profile.ttsVoice === v;
           return (
             <button
               key={v}
+              role="radio"
+              aria-checked={active}
               onClick={() => update({ ttsVoice: v })}
               aria-label={`Voice ${v}${active ? ', selected' : ''}`}
-              aria-pressed={active}
               style={{
                 minHeight: 64,
                 minWidth: 80,
@@ -368,10 +386,15 @@ export default function SettingsScreen({ goBack, navigate }: ScreenProps) {
         Usage is recorded to improve the app.
       </Body>
       <SecondaryButton
-        label="Sign out"
+        label={confirmSignOut ? 'Confirm sign out' : 'Sign out'}
         tone="danger"
-        hint="Clear your account and return to the login screen"
+        hint={confirmSignOut ? 'Tap again to clear your account and return to the login screen' : 'Requires a second tap to confirm'}
         onClick={async () => {
+          if (!confirmSignOut) {
+            setConfirmSignOut(true);
+            announce('Tap Confirm sign out to clear your account and return to the login screen.');
+            return;
+          }
           track('auth', 'logout', {});
           await reset();
           navigate({ name: 'home' });

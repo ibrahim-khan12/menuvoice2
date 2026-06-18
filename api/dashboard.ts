@@ -55,7 +55,7 @@ function excludeList(): string[] {
 }
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
-  const expected = process.env.REPORT_KEY;
+  const expected = process.env.REPORT_KEY?.trim();
   const provided = (req.query.key as string) ?? '';
   const format = (req.query.format as string) ?? 'html';
 

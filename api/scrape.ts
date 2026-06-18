@@ -3,6 +3,7 @@ import type { VercelRequest, VercelResponse } from '@vercel/node';
 const BROWSERLESS_TOKEN = process.env.BROWSERLESS_TOKEN ?? '';
 // Below this many characters of stripped text, assume the page is a JS shell and try headless.
 const JS_SHELL_THRESHOLD = 500;
+const MAX_HTML_BYTES = 2 * 1024 * 1024;
 
 function stripHtml(html: string): string {
   return html
@@ -20,23 +21,57 @@ function stripHtml(html: string): string {
     .slice(0, 60000);
 }
 
-async function fetchWithBrowserless(url: string): Promise<string> {
-  const res = await fetch(
-    `https://chrome.browserless.io/content?token=${BROWSERLESS_TOKEN}`,
-    {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ url, waitFor: 3000 }),
-      signal: AbortSignal.timeout(25000),
+async function readCappedText(response: Response, maxBytes: number): Promise<string> {
+  const declared = Number(response.headers.get('content-length') || 0);
+  if (Number.isFinite(declared) && declared > maxBytes) throw new Error('page_too_large');
+  if (!response.body) {
+    const text = await response.text();
+    if (new TextEncoder().encode(text).byteLength > maxBytes) throw new Error('page_too_large');
+    return text;
+  }
+
+  const reader = response.body.getReader();
+  const chunks: Uint8Array[] = [];
+  let total = 0;
+  try {
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      if (!value) continue;
+      total += value.byteLength;
+      if (total > maxBytes) {
+        try { await reader.cancel(); } catch {}
+        throw new Error('page_too_large');
+      }
+      chunks.push(value);
     }
-  );
+  } finally {
+    reader.releaseLock();
+  }
+
+  const out = new Uint8Array(total);
+  let offset = 0;
+  for (const chunk of chunks) {
+    out.set(chunk, offset);
+    offset += chunk.byteLength;
+  }
+  return new TextDecoder().decode(out);
+}
+
+async function fetchWithBrowserless(url: string): Promise<string> {
+  const res = await fetch('https://chrome.browserless.io/content', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${BROWSERLESS_TOKEN}` },
+    body: JSON.stringify({ url, waitFor: 3000 }),
+    signal: AbortSignal.timeout(25000),
+  });
   if (res.status === 429 || res.status === 402) {
     // Log loudly so this shows up in Vercel error logs and triggers any alerts.
     console.error('[MenuVoice] BROWSERLESS_CREDITS_EXHAUSTED — headless fallback disabled until plan is renewed.');
     throw new Error('credits_exhausted');
   }
   if (!res.ok) throw new Error(`Browserless error (${res.status})`);
-  return stripHtml(await res.text());
+  return stripHtml(await readCappedText(res, MAX_HTML_BYTES));
 }
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
@@ -77,7 +112,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       return res.status(415).json({ error: "Hey, sorry — that link goes to a PDF file, and I can't read those yet. Try finding the menu as a regular webpage instead." });
     }
 
-    let text = stripHtml(await response.text());
+    let text = stripHtml(await readCappedText(response, MAX_HTML_BYTES));
 
     // Page looks like an empty JS shell — retry with headless browser if token is configured.
     if (text.length < JS_SHELL_THRESHOLD && BROWSERLESS_TOKEN) {
@@ -92,9 +127,11 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     return res.status(200).json({ text });
   } catch (e: any) {
     const msg =
-      e?.name === 'TimeoutError'
-        ? "Hey, sorry — that website is taking too long to respond. Try again in a moment."
-        : "Hey, sorry — I couldn't reach that website. Check the link and try again.";
+      e?.message === 'page_too_large'
+        ? 'Hey, sorry. That page is too large for me to read. Try a direct link to the menu instead.'
+        : e?.name === 'TimeoutError'
+          ? "Hey, sorry — that website is taking too long to respond. Try again in a moment."
+          : "Hey, sorry — I couldn't reach that website. Check the link and try again.";
     return res.status(502).json({ error: msg });
   }
 }

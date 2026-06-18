@@ -10,6 +10,7 @@ import { ParsedMenu, UserProfile, ChatTurn } from '../types';
 import { track } from './telemetry';
 
 const DIRECT_KEY = import.meta.env.VITE_OPENAI_API_KEY ?? '';
+const AUDIO_PROVIDER = import.meta.env.VITE_AUDIO_PROVIDER ?? 'openai';
 const VISION_MODEL = 'gpt-5.4-mini';
 const CHAT_MODEL = 'gpt-5.4-mini';
 const TTS_MODEL = 'tts-1-hd';
@@ -48,7 +49,7 @@ async function chatCompletions(body: object): Promise<any> {
 }
 
 async function audioTranscriptions(form: FormData): Promise<any> {
-  if (DIRECT) {
+  if (DIRECT && AUDIO_PROVIDER !== 'cartesia') {
     const res = await fetch('https://api.openai.com/v1/audio/transcriptions', {
       method: 'POST',
       headers: directHeaders(),
@@ -63,7 +64,7 @@ async function audioTranscriptions(form: FormData): Promise<any> {
 }
 
 async function audioSpeech(body: object): Promise<Blob> {
-  if (DIRECT) {
+  if (DIRECT && AUDIO_PROVIDER !== 'cartesia') {
     const res = await fetch('https://api.openai.com/v1/audio/speech', {
       method: 'POST',
       headers: directHeaders({ 'Content-Type': 'application/json' }),
@@ -129,7 +130,7 @@ export async function transcribeAudio(blob: Blob): Promise<string> {
   const form = new FormData();
   const ext = blob.type.includes('mp4') ? 'mp4' : blob.type.includes('webm') ? 'webm' : 'm4a';
   form.append('file', blob, `speech.${ext}`);
-  form.append('model', 'whisper-1');
+  form.append('model', AUDIO_PROVIDER === 'cartesia' ? 'ink-whisper' : 'whisper-1');
   form.append('language', 'en');
   const json = await audioTranscriptions(form);
   return (json.text ?? '').trim();
@@ -169,14 +170,14 @@ function buildSystemPrompt(menu: ParsedMenu, profile: UserProfile): string {
 
 export function buildOpeningLine(menu: ParsedMenu): string {
   const names = menu.categories.map((c) => c.name);
-  const totalItems = menu.categories.reduce((sum, c) => sum + c.items.length, 0);
   if (names.length === 0) return 'I have your menu, but I could not find any sections. Want to retake the photos?';
   const list = names.length === 1 ? names[0] : names.slice(0, -1).join(', ') + ', and ' + names[names.length - 1];
   const sectionWord = names.length === 1 ? 'section' : 'sections';
-  const itemPart = totalItems > 0 ? ` and ${totalItems} item${totalItems === 1 ? '' : 's'}` : '';
+  const pageCount = menu.pageCount ?? 0;
+  const pagePart = pageCount > 0 ? ` across ${pageCount} page${pageCount === 1 ? '' : 's'}` : '';
   // Incomplete warning comes FIRST and stays to one sentence.
   const prefix = menu.incomplete ? "This wasn't a complete menu. " : '';
-  return `${prefix}I found ${names.length} ${sectionWord}${itemPart} on this menu: ${list}. Where would you like to start?`;
+  return `${prefix}I found ${names.length} ${sectionWord}${pagePart} on this menu: ${list}. Where would you like to start?`;
 }
 
 // Keep the first 2 turns (establishes what was ordered/discussed early on) plus

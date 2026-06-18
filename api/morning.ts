@@ -21,15 +21,15 @@ import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { buildMorningReport, renderText, renderEmailHtml, esc, fmtTs, ago, activity, type UserRow } from './_morningData.js';
 
 // Subject line shared with the email path so a Gmail filter matches both.
-function emailSubject(d: { anyoneUsed: boolean; newUsers: unknown[]; returningUsers: unknown[] }): string {
+function emailSubject(d: { anyoneUsed: boolean; newUsers: unknown[]; returningUsers: unknown[]; website?: { visits: number } }): string {
   const date = new Date().toISOString().slice(0, 10);
   return d.anyoneUsed
-    ? `[MenuVoice] Morning report ${date} — ${d.newUsers.length} new, ${d.returningUsers.length} returning`
+    ? `[MenuVoice] Morning report ${date} — ${d.newUsers.length} new, ${d.returningUsers.length} returning, ${d.website?.visits ?? 0} site visits`
     : `[MenuVoice] Morning report ${date} — no users in window`;
 }
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
-  const expected = process.env.REPORT_KEY;
+  const expected = process.env.REPORT_KEY?.trim();
   const provided = (req.query.key as string) ?? '';
   const format = (req.query.format as string) ?? 'html';
 
@@ -119,6 +119,24 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         </table>`
       : `<p class="empty">No returning users in this window.</p>`;
 
+    const f = d.funnel;
+    const funnelSection = f.sessions > 0 ? `
+<h2>Where sessions dropped off</h2>
+<table>
+  <thead><tr><th scope="col">Stage</th><th scope="col" class="r">Reached</th><th scope="col" class="r">% of sessions</th><th scope="col" class="r">vs prev</th></tr></thead>
+  <tbody>
+    ${f.stages.map((s) => {
+      const dlt = s.count - s.prev;
+      const p = s.key === 'sessions' ? 100 : (f.sessions > 0 ? Math.round((s.count / f.sessions) * 100) : 0);
+      return `<tr><td>${esc(s.label)}</td><td class="r">${esc(s.count)}</td><td class="r">${s.key === 'sessions' ? '' : esc(p + '%')}</td><td class="r">${esc((dlt > 0 ? '+' : '') + dlt)}</td></tr>`;
+    }).join('')}
+  </tbody>
+</table>
+${f.biggestLeak ? `<p class="meta">Biggest drop-off: <strong>${esc(f.biggestLeak.fromLabel)}</strong> to <strong>${esc(f.biggestLeak.toLabel)}</strong> (lost ${esc(f.biggestLeak.lost)}, ${esc(Math.round(f.biggestLeak.pct * 100) + '%')}).</p>` : ''}
+<div class="cards">
+  ${f.failures.map((x) => `<div class="card"><div class="num ${x.count > 0 ? 'bad' : ''}">${esc(x.count)}</div><div class="lbl">${esc(x.label)} fails (${(x.count - x.prev) >= 0 ? '+' : ''}${esc(x.count - x.prev)})</div></div>`).join('')}
+</div>` : '';
+
     const html = `<!doctype html>
 <html lang="en">
 <head>
@@ -176,6 +194,8 @@ ${newTable}
 
 <h2>Returning users (${esc(d.returningUsers.length)})</h2>
 ${returningTable}
+
+${funnelSection}
 
 ${d.excluded.length ? `<p class="meta">Excluded internal accounts: ${esc(d.excluded.join(', '))}</p>` : ''}
 </body>

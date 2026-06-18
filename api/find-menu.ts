@@ -170,12 +170,11 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     }
 
     // Couldn't get a menu. Tell the user the truth about what we found.
-    const reason =
-      typeof result?.reason === 'string' && result.reason.trim()
+    const reason = result?.found
+      ? "I found this restaurant but couldn't read their menu online. Try scanning the physical menu."
+      : typeof result?.reason === 'string' && result.reason.trim()
         ? result.reason.trim()
-        : result?.found
-          ? 'I found the restaurant, but their menu does not seem to be posted online.'
-          : "I couldn't find that restaurant online. Try adding the city, like 'Luigi's, Bloomington Indiana'.";
+        : "I couldn't find that restaurant online. Try adding the city, like 'Luigi's, Bloomington Indiana'.";
     return res.status(404).json({ error: reason, restaurantName });
   } catch (e: any) {
     if (e instanceof FriendlyError) return res.status(e.status).json({ error: e.message });

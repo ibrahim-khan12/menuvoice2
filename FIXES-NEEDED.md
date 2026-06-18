@@ -1,10 +1,35 @@
 # MenuVoice — Fixes & Open Work
 
-> Last updated: 2026-06-13. Single source of truth for all open bugs, a11y issues,
+> Last updated: 2026-06-18. Single source of truth for all open bugs, a11y issues,
 > and pending work. Consolidates REVIEW.md, VOICEOVER-AUDIT.md, SMOKE-RESULTS.md,
 > and PLAN-REMAINING.md. Completed history in PROGRESS.md. Feature backlog in IDEAS.md.
 
 Effort: S = under 1h · M = 1–3h · L = half day+
+
+## Execution status update - 2026-06-18
+
+Verified with `npm run build` and `npm run a11y:audit` against Vite preview on
+`http://localhost:4173`.
+
+| Item | Status | Evidence | Remaining action |
+| --- | --- | --- | --- |
+| B1 | Partial | `ProfileContext` now syncs loaded/reset `appVoice` state into `speech.ts`; `speak()` and `coach()` were already gated. | Full first-use/page-entry announcement model from B6 still needs a dedicated pass. |
+| B2 | Done | Onboarding step changes now return focus to the active step heading instead of dropping VoiceOver on `<body>`. Verified in the current `npm run build` and `npm run a11y:audit` pass. | Real iPhone VoiceOver confirmation is still worth doing with the broader manual sweep. |
+| B3 | Partial | Settings name/dislike mic flows now update the `role="status"` region for permission, recording, transcription, and save/error states. | Login/Onboarding already have local announcers but still need a full Phase 2 verification pass. |
+| B4 | Done | Capture scanner coaching now avoids double-speaking by silencing the duplicate live region path when app voice is already handling the prompt. Verified in the current `npm run build` and `npm run a11y:audit` pass. | Real-device scan flow remains the final confidence check. |
+| B5 | Mostly code complete | Root loading text now has `role="status"`; `SavedScreen` cards use `role="group"`; Conversation uses `aria-disabled` plus no-op actions; Settings voice/spice pickers use radio semantics; transcribing labels and sign-out confirm were added; Find no longer auto-focuses; audit still passes with 0 violations. | Do one focused VoiceOver/manual pass across Conversation, Saved, and Settings to confirm behavior on device. |
+| A1 | Code complete, manual check needed | Capture preview now uses actual video aspect ratio plus `objectFit: contain`; fallback zoom crop is applied to `captureFrame()`. Build passed. | Real portrait/landscape device comparison of preview vs saved JPEG. |
+| A2 | Partial | Added camera zoom helpers, native zoom application, accessible zoom buttons, fallback preview scale, and matching centered capture crop. | Real iPhone fallback and Android native zoom checks. |
+| A3 | Code complete, manual check needed | `src/index.css` now adds a compact landscape capture layout that moves controls beside the preview without overlap. Build and a11y audit both passed after the CSS change. | Real landscape phone/tablet capture check for reachability, VoiceOver order, and upright saved images. |
+| B7 | Partial | Added `PauseProvider`, a global Pause/Resume control, pause-aware speech stop, and a registered listening-stop hook so speech/listening do not auto-restart while paused. | Manual mic and screen-reader verification is still needed on real devices. |
+| B7a | Code complete, manual check needed | Conversation now lets empty-space taps interrupt speech, while preserving normal behavior on actual controls and keeping the explicit interrupt button. | Manual tap-interrupt testing with VoiceOver and touch exploration. |
+| B9 | Code complete, manual check needed | Find screen no longer rejects non-comma searches; normalizes state names/abbreviations such as `Montclair New Jersey` to `Montclair, NJ`. | Voice/manual search checks with ambiguous one-word locations. |
+| B10 | Partial | Name search results now require a touch confirmation before saving/opening. | Voice yes/no confirmation and next-match handling are not implemented. |
+| C1 | Code complete | `_menuCore.ts` already used Browserless `Authorization`; legacy `api/scrape.ts` now does too. | Confirm whether `api/scrape.ts` is still deployed/live. |
+| C2 | Code complete | `find-menu.ts` sanitizes direct search categories; `_menuCore.ts` now sanitizes parsed source categories too. | Add targeted API fixture tests if desired. |
+| C5 | Code complete | `_menuCore.ts` now checks `content-length` and streams PDF/HTML bodies with byte caps before buffering. | Add synthetic oversized/chunked response test harness. |
+| D2 | Code complete | `find-menu.ts` now uses fixed factual copy when `found=true` but no readable menu is extracted. | Production smoke after Browserless token renewal. |
+| D3 | Blocked | Local response shape preserves `menu.incomplete`; production was not checked in this run. | Needs deployed URL/env access and known partial-menu curl checks. |
 
 ---
 
@@ -125,6 +150,78 @@ Do in one pass:
 - **P2-7** `src/screens/FindScreen.tsx:88`: remove `autoFocus` — keyboard pops while VoiceOver is mid-announcement; let users reach the input one swipe after the heading
 - **P2-8** `src/screens/SettingsScreen.tsx:327-336`: sign-out → two-tap confirm (arm then confirm), same pattern as SavedScreen delete
 - **P2-10** `src/App.tsx:46-52`: root loading `<p>` → add `role="status"`
+
+---
+
+### B6. First-use guidance and page-change announcement model [M, HIGH RISK]
+**Source:** User field-testing notes, 2026-06-16  
+**Problem:** The app has not made a clear product decision for first-use speech. Blind users may hear overlapping app speech and VoiceOver, but if app speech is muted they still need reliable page-change and state-change announcements. Users also need first-run instruction for actions such as Analyze, Browse mode, and when to turn on or use a screen reader.  
+**Fix:** Define one consistent announcement model:
+- Every route/screen change updates a stable heading and a `role="status"`/live region with a short page-change message.
+- App TTS is optional and never the only source of guidance.
+- First-use tips explain the current mode and the next primary action in plain speech and DOM text, for example "Write your answer in the box", "Tap Analyze to read this image", or "Turn on your screen reader when browsing the menu."
+- No emojis in spoken output.
+
+**Acceptance:** With app voice on, no duplicate/overlapping VoiceOver speech on screen entry. With app voice off, VoiceOver still announces screen changes, mode changes, and required next actions.
+
+### B7. Pause all app speech and listening [M, HIGH RISK]
+**Source:** User field-testing notes, 2026-06-16  
+**Problem:** Browse mode and other flows can keep listening or speaking while the user needs quiet control. There is no obvious pause control that stops both speech output and microphone/listening behavior.  
+**Fix:** Add a global Pause control that:
+- Stops current app TTS immediately.
+- Stops active speech recognition/listening immediately.
+- Prevents automatic listening from restarting until resumed.
+- Is reachable by VoiceOver, has a clear label, and preserves the user's current screen.
+- Explains itself on first use.
+
+**Acceptance:** While paused, the app does not speak, does not listen, and does not reopen the mic during browse mode or conversation mode. Resuming restores the previous mode intentionally.
+
+### B7a. Tap anywhere to interrupt app speech [S, HIGH RISK]
+**Source:** User field-testing notes, 2026-06-17  
+**Problem:** During app speech, the user currently has to find the specific interrupt/talk control. For a blind or low-vision user, that makes it too hard to stop long speech quickly. When MenuVoice is speaking, a tap anywhere on the main conversation screen should interrupt the speech and start the user's turn.  
+**Fix:** In the conversation/browse speech surfaces, make the full screen an interrupt target while `phase === 'speaking'`:
+- Any tap/click outside an explicitly interactive control calls the same barge-in path as the current interrupt button: `stopSpeaking('bargein')` then start listening.
+- Do not steal taps from real controls, links, settings, back buttons, or form fields.
+- Keep the visible button and VoiceOver label for discoverability, but do not require precise targeting.
+- Announce the mode in plain language, for example "MenuVoice is speaking. Tap anywhere to interrupt."
+
+**Acceptance:** While MenuVoice is speaking on the conversation screen, tapping empty space anywhere on the screen stops speech and opens the mic. Tapping a real control still performs that control's normal action. VoiceOver users still have an explicit labeled interrupt control.
+
+### B7b. Announce browser and device permission prompts [S, HIGH RISK]
+**Source:** User field-testing notes, 2026-06-17  
+**Problem:** Browser permission prompts for microphone, camera, location, notifications, or other device access can appear visually without enough app guidance. Blind and low-vision users may not know that the browser is waiting for an Allow/Block decision, so the app can seem frozen.  
+**Fix:** Before every permission request, announce what is about to happen through app speech when enabled and through a `role="status"` live region:
+- Use plain, direct copy, for example "Your browser is asking for microphone permission. Choose Allow so MenuVoice can hear you."
+- Keep the same message visible in DOM text near the current task.
+- If permission is denied or dismissed, explain the next step in plain language and keep the user on the same task.
+- Cover microphone, camera/photo capture, location, and any future browser/device permission requests through one shared helper if practical.
+- Do not rely only on color, icons, or visual browser UI.
+
+**Acceptance:** When a browser permission prompt appears, a blind user hears or receives a VoiceOver announcement explaining which permission is needed and what to choose. If the prompt is denied or dismissed, the app announces the recovery path without silently failing.
+
+### B8. AI-normalized allergy entry and inferred allergen warnings [M, HIGH RISK]
+**Source:** User field-testing notes, 2026-06-16  
+**Problem:** Allergy entry currently risks accepting misspellings or one-shot dictated phrases too literally. A user might say "peanuts and shellfish" with errors or in one sentence, and the app should normalize that into common allergy categories rather than saving raw, misspelled text. The app should also warn from likely ingredient assumptions when a cuisine or dish type commonly contains an allergen, while making clear that it is a warning, not a verified claim.  
+**Fix:** Add an allergy parser/normalizer:
+- Convert dictated or typed allergy text into canonical common allergens where possible.
+- Ask for confirmation when uncertain instead of silently saving a risky guess.
+- Preserve user-entered custom allergies that do not map cleanly.
+- During menu analysis/conversation, warn when an item or cuisine commonly contains a saved allergen or cross-contact risk, even if the exact ingredient list is incomplete.
+- Keep warning copy conservative, for example "This may contain peanuts. Ask the restaurant before ordering."
+
+**Acceptance:** Misspelled or dictated allergy entries normalize to common allergen categories, uncertain mappings request confirmation, and menu answers surface conservative allergen warnings without making unverified promises.
+
+### B9. Location input should not require comma formatting [S, MED RISK]
+**Source:** User field-testing notes, 2026-06-16  
+**Problem:** The town/location flow requires users to type a comma-formatted location before sending to the API. That is brittle for voice input and confusing for blind users who may not know the exact required punctuation.  
+**Fix:** Accept natural location input without requiring a comma. Before sending to the API, normalize likely "town state" or "town NJ" style input into the format the API expects. If clarification is needed, ask in plain language rather than telling the user to add punctuation.  
+**Acceptance:** Inputs like "Montclair New Jersey", "Montclair NJ", and "Montclair" do not fail solely because they lack a comma. The app either normalizes them or asks one clear follow-up question.
+
+### B10. Confirm restaurant match before opening menu flow [M, HIGH RISK]
+**Source:** User field-testing notes, 2026-06-16  
+**Problem:** When the app finds a restaurant, it can move forward before confirming that the found result is actually the restaurant the user wanted. A wrong restaurant means the user may browse, save, or ask about the wrong menu without realizing it.  
+**Fix:** Before opening the menu or saving the restaurant, present a confirmation step with the restaurant name, town/address when available, and a clear yes/no path. The user should be able to answer by voice or touch. If they say no, return to the search/location prompt or offer the next likely match.  
+**Acceptance:** After restaurant lookup, the app asks a clear confirmation such as "I found Mario's Pizza in Montclair. Is this the restaurant you want?" It only proceeds after a yes. A no does not save or open that restaurant.
 
 ---
 

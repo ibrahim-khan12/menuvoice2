@@ -16,7 +16,7 @@ import { buildMorningReport, renderText, renderEmailHtml, sendEmail } from './_m
 function authorized(req: VercelRequest): boolean {
   const auth = (req.headers.authorization as string) ?? '';
   if (process.env.CRON_SECRET && auth === `Bearer ${process.env.CRON_SECRET}`) return true;
-  if (process.env.REPORT_KEY && (req.query.key as string) === process.env.REPORT_KEY) return true;
+  if (process.env.REPORT_KEY && (req.query.key as string) === process.env.REPORT_KEY.trim()) return true;
   return false;
 }
 
@@ -55,7 +55,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const date = new Date().toISOString().slice(0, 10);
     // Stable, unique tag so a Gmail filter can label every report reliably.
     const subject = d.anyoneUsed
-      ? `[MenuVoice] Morning report ${date} — ${d.newUsers.length} new, ${d.returningUsers.length} returning`
+      ? `[MenuVoice] Morning report ${date} — ${d.newUsers.length} new, ${d.returningUsers.length} returning, ${d.website.visits} site visits`
       : `[MenuVoice] Morning report ${date} — no users in window`;
 
     const host = req.headers.host;

@@ -10,7 +10,17 @@ import { Screen, Title, PrimaryButton, SecondaryButton } from '../components';
 import { ScreenProps, Route } from '../nav';
 import { ParsedMenu } from '../types';
 import { speak, coach, stopCoach, isAppVoiceOn } from '../lib/speech';
-import { startCamera, stopCamera, captureFrame, compressImage, enableTorch, disableTorch } from '../lib/camera';
+import {
+  startCamera,
+  stopCamera,
+  captureFrame,
+  compressImage,
+  enableTorch,
+  disableTorch,
+  getZoomRange,
+  setZoom as setCameraZoom,
+  type ZoomRange,
+} from '../lib/camera';
 import { parseMenuFromImages, hasApiKey } from '../lib/openai';
 import { saveRestaurant } from '../lib/storage';
 import { MenuScanner } from '../lib/scanner';
@@ -46,6 +56,7 @@ function mergeMenus(base: ParsedMenu, extra: ParsedMenu): ParsedMenu {
     ...base,
     categories,
     restaurantName: base.restaurantName || extra.restaurantName,
+    pageCount: (base.pageCount ?? 0) + (extra.pageCount ?? 0),
     // Stay honest: only clear the flag if the new photos look complete too.
     incomplete: extra.incomplete === true,
   };
@@ -73,6 +84,9 @@ export default function CaptureScreen({
   const [cameraReady, setCameraReady] = useState(false);
   const [analyzing, setAnalyzing] = useState(false);
   const [autoMode, setAutoMode] = useState(true);
+  const [previewAspect, setPreviewAspect] = useState('3 / 4');
+  const [zoomRange, setZoomRange] = useState<ZoomRange>({ min: 1, max: 3, step: 0.25, value: 1, native: false });
+  const [zoom, setZoom] = useState(1);
 
   // Start / stop camera.
   useEffect(() => {
@@ -83,6 +97,15 @@ export default function CaptureScreen({
           const s = await startCamera(videoRef.current);
           if (cancelled) { stopCamera(s); return; }
           streamRef.current = s;
+          const video = videoRef.current;
+          if (video.videoWidth && video.videoHeight) {
+            setPreviewAspect(`${video.videoWidth} / ${video.videoHeight}`);
+          }
+          const range = getZoomRange(s);
+          const initialZoom = range.native ? range.min : 1;
+          if (range.native) await setCameraZoom(s, initialZoom);
+          setZoomRange({ ...range, value: initialZoom });
+          setZoom(initialZoom);
           setCameraReady(true);
           enableTorch(s);
           track('capture', 'camera_start', { outcome: 'success' });
@@ -153,7 +176,7 @@ export default function CaptureScreen({
           coach(msg);
         },
         onCapture: () => {
-          addPhoto(captureFrame(videoRef.current!), true);
+          addPhoto(captureFrame(videoRef.current!, 0.6, zoomRange.native ? 1 : zoom), true);
           autoRef.current?.acknowledgeCapture();
         },
         onStruggle: () => {
@@ -181,7 +204,7 @@ export default function CaptureScreen({
       stopCoach();
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [autoMode, cameraReady, analyzing, camError]);
+  }, [autoMode, cameraReady, analyzing, camError, zoom, zoomRange.native]);
 
   const addPhoto = (b64: string | null, viaAuto: boolean) => {
     if (!b64) return;
@@ -200,7 +223,18 @@ export default function CaptureScreen({
 
   const manualCapture = () => {
     if (analyzing || !videoRef.current) return;
-    addPhoto(captureFrame(videoRef.current), false);
+    addPhoto(captureFrame(videoRef.current, 0.6, zoomRange.native ? 1 : zoom), false);
+  };
+
+  const changeZoom = async (direction: 1 | -1) => {
+    const next = Math.min(zoomRange.max, Math.max(zoomRange.min, Number((zoom + direction * zoomRange.step).toFixed(2))));
+    if (next === zoom) return;
+    const native = await setCameraZoom(streamRef.current, next);
+    setZoomRange((prev) => ({ ...prev, native: native || prev.native }));
+    setZoom(next);
+    const msg = `Zoom ${next.toFixed(next % 1 === 0 ? 0 : 1)}x.`;
+    setStatus(msg);
+    speak(msg);
   };
 
   const onPickFiles = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -288,6 +322,7 @@ export default function CaptureScreen({
 
     try {
       let menu = await parseMenuFromImages(photos);
+      menu = { ...menu, pageCount: photos.length };
       if (appendTo) menu = mergeMenus(appendTo.menu, menu);
       const itemCount = menu.categories.reduce((s, c) => s + c.items.length, 0);
       track('capture', 'ocr_result', {
@@ -347,10 +382,11 @@ export default function CaptureScreen({
       </button>
 
       <div
+        className="capture-preview"
         style={{
           position: 'relative',
           width: '100%',
-          aspectRatio: '3 / 4',
+          aspectRatio: previewAspect,
           background: '#000',
           borderRadius: 'var(--r-lg)',
           overflow: 'hidden',
@@ -363,7 +399,17 @@ export default function CaptureScreen({
           playsInline
           muted
           aria-hidden="true"
-          style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+          onLoadedMetadata={(e) => {
+            const video = e.currentTarget;
+            if (video.videoWidth && video.videoHeight) setPreviewAspect(`${video.videoWidth} / ${video.videoHeight}`);
+          }}
+          style={{
+            width: '100%',
+            height: '100%',
+            objectFit: 'contain',
+            transform: zoomRange.native ? undefined : `scale(${zoom})`,
+            transformOrigin: 'center center',
+          }}
         />
         {analyzing && (
           <div
@@ -396,7 +442,28 @@ export default function CaptureScreen({
         {status}
       </p>
 
-      <div className="col">
+      <div className="col capture-controls">
+        <div className="row" role="group" aria-label="Camera zoom controls">
+          <button
+            className="btn btn-secondary"
+            onClick={() => changeZoom(-1)}
+            disabled={analyzing || !!camError || !cameraReady || zoom <= zoomRange.min}
+            aria-label="Zoom out"
+            style={{ minHeight: 64 }}
+          >
+            Zoom out
+          </button>
+          <button
+            className="btn btn-secondary"
+            onClick={() => changeZoom(1)}
+            disabled={analyzing || !!camError || !cameraReady || zoom >= zoomRange.max}
+            aria-label="Zoom in"
+            style={{ minHeight: 64 }}
+          >
+            Zoom in
+          </button>
+        </div>
+
         <PrimaryButton
           label={
             !cameraReady && !camError ? 'Starting camera…' : 'Take photo'

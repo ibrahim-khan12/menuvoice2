@@ -2,6 +2,7 @@ import React, { createContext, useContext, useEffect, useState, useCallback } fr
 import { UserProfile, EMPTY_PROFILE } from '../types';
 import { loadProfile, saveProfile } from '../lib/storage';
 import { track } from '../lib/telemetry';
+import { setAppVoice } from '../lib/speech';
 
 interface ProfileCtx {
   profile: UserProfile;
@@ -18,6 +19,7 @@ export function ProfileProvider({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     loadProfile().then((p) => {
+      setAppVoice(p.appVoice !== false);
       setProfile(p);
       setLoaded(true);
     });
@@ -28,6 +30,9 @@ export function ProfileProvider({ children }: { children: React.ReactNode }) {
       track('profile', 'update', { content: { fields: Object.keys(patch) } });
       setProfile((prev) => {
         const next = { ...prev, ...patch };
+        if (Object.prototype.hasOwnProperty.call(patch, 'appVoice')) {
+          setAppVoice(next.appVoice !== false);
+        }
         saveProfile(next).catch(() => {});
         return next;
       });
@@ -36,6 +41,7 @@ export function ProfileProvider({ children }: { children: React.ReactNode }) {
   );
 
   const reset = useCallback(async () => {
+    setAppVoice(true);
     setProfile({ ...EMPTY_PROFILE });
     await saveProfile({ ...EMPTY_PROFILE });
   }, []);

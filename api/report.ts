@@ -51,7 +51,7 @@ function fmtTs(ts: unknown): string {
 }
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
-  const expected = process.env.REPORT_KEY;
+  const expected = process.env.REPORT_KEY?.trim();
   const provided = (req.query.key as string) ?? '';
 
   if (!expected) {

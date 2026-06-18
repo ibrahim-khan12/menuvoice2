@@ -30,6 +30,7 @@ export interface ParsedMenu {
   notes?: string;
   restaurantName?: string; // extracted from the menu photos if visible
   incomplete?: boolean; // model judged the menu partial (cut off, missing sections)
+  pageCount?: number; // number of menu pages/photos captured when known
 }
 
 export interface SavedRestaurant {

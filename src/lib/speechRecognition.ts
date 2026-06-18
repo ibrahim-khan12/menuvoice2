@@ -8,6 +8,9 @@
 
 import { track } from './telemetry';
 
+const STT_PROVIDER = import.meta.env.VITE_STT_PROVIDER ?? 'browser';
+const CARTESIA_VERSION = '2026-03-01';
+
 // Minimal types for Web Speech API — not in all TypeScript DOM lib versions.
 interface SR {
   continuous: boolean;
@@ -28,6 +31,14 @@ interface SRErrorEvent extends Event { error: string; message: string; }
 
 export function isSpeechRecognitionSupported(): boolean {
   if (typeof window === 'undefined') return false;
+  if (
+    STT_PROVIDER === 'cartesia' &&
+    !!navigator.mediaDevices?.getUserMedia &&
+    typeof WebSocket !== 'undefined' &&
+    !!((window as any).AudioContext || (window as any).webkitAudioContext)
+  ) {
+    return true;
+  }
   return !!(
     (window as any).SpeechRecognition ||
     (window as any).webkitSpeechRecognition
@@ -36,6 +47,12 @@ export function isSpeechRecognitionSupported(): boolean {
 
 export class SpeechManager {
   private recognition: SR | null = null;
+  private ws: WebSocket | null = null;
+  private stream: MediaStream | null = null;
+  private audioContext: AudioContext | null = null;
+  private source: MediaStreamAudioSourceNode | null = null;
+  private processor: ScriptProcessorNode | null = null;
+  private usingCartesia = false;
   private shouldRestart = false;
   private lastTranscript = '';
   private restartTimeout: ReturnType<typeof setTimeout> | null = null;
@@ -46,6 +63,8 @@ export class SpeechManager {
     private onTranscript: (transcript: string) => void,
     private onError: (message: string) => void,
   ) {
+    this.usingCartesia = STT_PROVIDER === 'cartesia';
+    if (this.usingCartesia) return;
     if (!isSpeechRecognitionSupported()) return;
     const Ctor =
       (window as any).SpeechRecognition ||
@@ -117,12 +136,27 @@ export class SpeechManager {
   }
 
   start() {
+    if (this.usingCartesia) {
+      this.startCartesia().catch((error) => {
+        console.warn('Cartesia realtime STT failed:', error);
+        track('speech', 'stt_error', {
+          outcome: 'failure',
+          metadata: { provider: 'cartesia', error: error?.message ?? String(error) },
+        });
+        this.onError('I had trouble starting the microphone. Please try again.');
+      });
+      return;
+    }
     this.shouldRestart = true;
     this.lastTranscript = '';
     try { this.recognition?.start(); } catch {}
   }
 
   stop() {
+    if (this.usingCartesia) {
+      this.stopCartesia(false);
+      return;
+    }
     this.shouldRestart = false;
     this.clearSilenceTimer();
     if (this.restartTimeout !== null) {
@@ -133,6 +167,16 @@ export class SpeechManager {
   }
 
   submitNow() {
+    if (this.usingCartesia) {
+      if (this.ws?.readyState === WebSocket.OPEN) {
+        this.ws.send(JSON.stringify({ type: 'close' }));
+      } else if (this.lastTranscript) {
+        const t = this.lastTranscript;
+        this.lastTranscript = '';
+        this.onTranscript(t);
+      }
+      return;
+    }
     this.clearSilenceTimer();
     const t = this.lastTranscript;
     this.lastTranscript = '';
@@ -142,6 +186,10 @@ export class SpeechManager {
   }
 
   destroy() {
+    if (this.usingCartesia) {
+      this.stopCartesia(false);
+      return;
+    }
     this.shouldRestart = false;
     this.clearSilenceTimer();
     if (this.restartTimeout !== null) {
@@ -151,5 +199,124 @@ export class SpeechManager {
     this.recognition?.abort();
     this.recognition = null;
   }
+
+  private async startCartesia() {
+    this.stopCartesia(false);
+    this.lastTranscript = '';
+    const tokenRes = await fetch('/api/transcribe?cartesiaToken=1', { method: 'POST' });
+    if (!tokenRes.ok) throw new Error(await tokenRes.text());
+    const tokenData = await tokenRes.json();
+    const token = tokenData?.token;
+    if (!token) throw new Error('No Cartesia access token returned.');
+
+    this.stream = await navigator.mediaDevices.getUserMedia({
+      audio: {
+        echoCancellation: true,
+        noiseSuppression: true,
+        autoGainControl: true,
+      },
+    });
+
+    const AudioCtor = (window as any).AudioContext || (window as any).webkitAudioContext;
+    const audioContext = new AudioCtor() as AudioContext;
+    this.audioContext = audioContext;
+    await audioContext.resume();
+
+    const url = new URL('wss://api.cartesia.ai/stt/turns/websocket');
+    url.searchParams.set('model', 'ink-2');
+    url.searchParams.set('encoding', 'pcm_s16le');
+    url.searchParams.set('sample_rate', String(audioContext.sampleRate));
+    url.searchParams.set('cartesia_version', CARTESIA_VERSION);
+    url.searchParams.set('access_token', token);
+
+    this.ws = new WebSocket(url);
+    this.ws.binaryType = 'arraybuffer';
+    this.ws.onmessage = (event) => this.handleCartesiaMessage(event.data);
+    this.ws.onerror = () => {
+      track('speech', 'stt_error', { outcome: 'failure', metadata: { provider: 'cartesia', error: 'websocket' } });
+    };
+    this.ws.onclose = () => this.stopCartesia(false);
+
+    const source = audioContext.createMediaStreamSource(this.stream);
+    const processor = audioContext.createScriptProcessor(4096, 1, 1);
+    this.source = source;
+    this.processor = processor;
+    processor.onaudioprocess = (event) => {
+      if (this.ws?.readyState !== WebSocket.OPEN) return;
+      const input = event.inputBuffer.getChannelData(0);
+      this.ws.send(floatToPcm16(input));
+    };
+    source.connect(processor);
+    processor.connect(audioContext.destination);
+  }
+
+  private handleCartesiaMessage(raw: any) {
+    let msg: any;
+    try { msg = JSON.parse(String(raw)); } catch { return; }
+    if (msg.type === 'turn.start') {
+      track('speech', 'stt_turn_start', { metadata: { provider: 'cartesia' } });
+      return;
+    }
+    if (msg.type === 'turn.update' || msg.type === 'turn.eager_end') {
+      if (typeof msg.transcript === 'string') this.lastTranscript = msg.transcript;
+      return;
+    }
+    if (msg.type === 'turn.end') {
+      const transcript = typeof msg.transcript === 'string' ? msg.transcript.trim() : this.lastTranscript.trim();
+      this.lastTranscript = '';
+      this.stopCartesia(false);
+      if (transcript) this.onTranscript(transcript);
+      return;
+    }
+    if (msg.type === 'error') {
+      track('speech', 'stt_error', {
+        outcome: 'failure',
+        metadata: { provider: 'cartesia', error: msg.message ?? msg.title ?? 'error' },
+      });
+      this.stopCartesia(false);
+      this.onError('I had trouble hearing you. Please try again.');
+    }
+  }
+
+  private stopCartesia(sendClose: boolean) {
+    if (sendClose && this.ws?.readyState === WebSocket.OPEN) {
+      try { this.ws.send(JSON.stringify({ type: 'close' })); } catch {}
+    }
+    if (this.processor) {
+      this.processor.disconnect();
+      this.processor.onaudioprocess = null;
+      this.processor = null;
+    }
+    if (this.source) {
+      this.source.disconnect();
+      this.source = null;
+    }
+    if (this.audioContext) {
+      this.audioContext.close().catch(() => {});
+      this.audioContext = null;
+    }
+    if (this.stream) {
+      this.stream.getTracks().forEach((track) => track.stop());
+      this.stream = null;
+    }
+    if (this.ws) {
+      this.ws.onclose = null;
+      this.ws.onmessage = null;
+      this.ws.onerror = null;
+      if (this.ws.readyState === WebSocket.OPEN || this.ws.readyState === WebSocket.CONNECTING) {
+        this.ws.close();
+      }
+      this.ws = null;
+    }
+  }
 }
 
+function floatToPcm16(input: Float32Array): ArrayBuffer {
+  const buffer = new ArrayBuffer(input.length * 2);
+  const view = new DataView(buffer);
+  for (let i = 0; i < input.length; i += 1) {
+    const s = Math.max(-1, Math.min(1, input[i]));
+    view.setInt16(i * 2, s < 0 ? s * 0x8000 : s * 0x7fff, true);
+  }
+  return buffer;
+}

@@ -150,6 +150,18 @@ body {
   letter-spacing: 0;
 }
 
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
 /* ── Buttons ─────────────────────────────────────── */
 .btn {
   min-height: var(--touch);
@@ -332,6 +344,13 @@ body {
   padding: 18px;
 }
 
+.conversation-layout {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  min-width: 0;
+}
+
 /* ── Phase indicator (ConversationScreen) ─────────── */
 /* Each phase gets a background fill + border + dot animation.
    The dot is aria-hidden; spoken state comes from aria-live. */
@@ -423,6 +442,7 @@ body {
   border-radius: var(--r-md);
   padding: 16px;
   min-height: 84px;
+  overflow: hidden;
 }
 
 .turn {
@@ -522,6 +542,32 @@ body {
 }
 
 /* ── Keyframes ────────────────────────────────────── */
+@media (orientation: landscape) and (max-height: 620px) {
+  #root {
+    max-width: none;
+  }
+
+  .screen {
+    display: grid;
+    grid-template-columns: minmax(280px, 1fr) minmax(260px, 360px);
+    grid-auto-rows: min-content;
+    align-content: start;
+    column-gap: 18px;
+    padding: 16px;
+  }
+
+  .capture-preview {
+    grid-column: 1;
+    grid-row: span 6;
+    max-height: calc(100vh - 32px);
+    align-self: start;
+  }
+
+  .capture-controls {
+    grid-column: 2;
+  }
+}
+
 @keyframes mic-ring {
   0%   { transform: scale(1);    opacity: 0.65; }
   65%  { transform: scale(1.06); opacity: 0;    }

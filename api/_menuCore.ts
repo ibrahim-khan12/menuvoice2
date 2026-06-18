@@ -10,6 +10,7 @@
 const BROWSERLESS_TOKEN = process.env.BROWSERLESS_TOKEN ?? '';
 const JS_SHELL_THRESHOLD = 500;
 const MAX_PDF_BYTES = 15 * 1024 * 1024;
+const MAX_HTML_BYTES = 2 * 1024 * 1024;
 
 export const PARSE_MODEL = process.env.VISION_MODEL ?? 'gpt-5.4-mini';
 
@@ -54,6 +55,51 @@ export function stripHtml(html: string): string {
     .replace(/\s+/g, ' ')
     .trim()
     .slice(0, 60000);
+}
+
+async function readCappedBody(response: Response, maxBytes: number, tooLargeMessage: string): Promise<Uint8Array> {
+  const declared = Number(response.headers.get('content-length') || 0);
+  if (Number.isFinite(declared) && declared > maxBytes) {
+    throw new FriendlyError(tooLargeMessage);
+  }
+
+  if (!response.body) {
+    const buf = new Uint8Array(await response.arrayBuffer());
+    if (buf.byteLength > maxBytes) throw new FriendlyError(tooLargeMessage);
+    return buf;
+  }
+
+  const reader = response.body.getReader();
+  const chunks: Uint8Array[] = [];
+  let total = 0;
+  try {
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      if (!value) continue;
+      total += value.byteLength;
+      if (total > maxBytes) {
+        try { await reader.cancel(); } catch {}
+        throw new FriendlyError(tooLargeMessage);
+      }
+      chunks.push(value);
+    }
+  } finally {
+    reader.releaseLock();
+  }
+
+  const out = new Uint8Array(total);
+  let offset = 0;
+  for (const chunk of chunks) {
+    out.set(chunk, offset);
+    offset += chunk.byteLength;
+  }
+  return out;
+}
+
+async function readCappedText(response: Response, maxBytes: number, tooLargeMessage: string): Promise<string> {
+  const bytes = await readCappedBody(response, maxBytes, tooLargeMessage);
+  return new TextDecoder().decode(bytes);
 }
 
 /** Rough "does this text look like a menu" signal: count price-like tokens. */
@@ -104,7 +150,11 @@ async function fetchWithBrowserless(url: string): Promise<string> {
     throw new Error('credits_exhausted');
   }
   if (!res.ok) throw new Error(`Browserless error (${res.status})`);
-  return res.text();
+  return readCappedText(
+    res,
+    MAX_HTML_BYTES,
+    'That rendered menu page is too large for me to read. Try a direct link to the menu instead.'
+  );
 }
 
 // SSRF guard: only plain http(s) to public hosts. Blocks localhost, private
@@ -155,14 +205,19 @@ async function fetchOne(url: string): Promise<MenuSource> {
   }
 
   if (contentType.includes('pdf') || /\.pdf(\?|$)/i.test(finalUrl)) {
-    const buf = await response.arrayBuffer();
-    if (buf.byteLength > MAX_PDF_BYTES) {
-      throw new FriendlyError('That menu PDF is too large for me to read. Try a link to the menu webpage instead.');
-    }
-    return { kind: 'pdf', base64: Buffer.from(buf).toString('base64'), url: finalUrl };
+    const bytes = await readCappedBody(
+      response,
+      MAX_PDF_BYTES,
+      'That menu PDF is too large for me to read. Try a link to the menu webpage instead.'
+    );
+    return { kind: 'pdf', base64: Buffer.from(bytes).toString('base64'), url: finalUrl };
   }
 
-  let html = await response.text();
+  let html = await readCappedText(
+    response,
+    MAX_HTML_BYTES,
+    'That menu page is too large for me to read. Try a direct link to the menu instead.'
+  );
   let text = stripHtml(html);
 
   // JS shell? Re-fetch rendered HTML through Browserless when configured.
@@ -243,6 +298,39 @@ export function extractJson(raw: string): any {
   throw new FriendlyError('The menu reader returned something unreadable. Please try again.');
 }
 
+export function sanitizeMenu(menu: ParsedMenu): ParsedMenu {
+  const categories: MenuCategory[] = [];
+  if (Array.isArray(menu.categories)) {
+    for (const cat of menu.categories) {
+      if (!cat || typeof cat !== 'object' || Array.isArray(cat)) continue;
+      const name = typeof cat.name === 'string' ? cat.name.trim() : '';
+      if (!name || !Array.isArray(cat.items)) continue;
+      const items: MenuItem[] = [];
+      for (const item of cat.items) {
+        if (!item || typeof item !== 'object' || Array.isArray(item)) continue;
+        const itemName = typeof item.name === 'string' ? item.name.trim() : '';
+        if (!itemName) continue;
+        items.push({
+          name: itemName,
+          description: typeof item.description === 'string' ? item.description : undefined,
+          price: typeof item.price === 'string' ? item.price : undefined,
+          ingredients: Array.isArray(item.ingredients)
+            ? item.ingredients.filter((x): x is string => typeof x === 'string')
+            : undefined,
+        });
+      }
+      if (items.length) categories.push({ name, items });
+    }
+  }
+  return {
+    ...menu,
+    categories,
+    notes: typeof menu.notes === 'string' ? menu.notes : undefined,
+    restaurantName: typeof menu.restaurantName === 'string' ? menu.restaurantName : undefined,
+    incomplete: menu.incomplete === true,
+  };
+}
+
 /** Run OpenAI extraction over a classified menu source. Throws FriendlyError. */
 export async function parseMenuSource(src: MenuSource): Promise<ParsedMenu> {
   let content: any;
@@ -280,9 +368,7 @@ export async function parseMenuSource(src: MenuSource): Promise<ParsedMenu> {
 
   const raw = json.choices?.[0]?.message?.content ?? '{}';
   const parsed = extractJson(raw) as ParsedMenu;
-  if (!Array.isArray(parsed.categories)) parsed.categories = [];
-  parsed.incomplete = parsed.incomplete === true;
-  return parsed;
+  return sanitizeMenu(parsed);
 }
 
 export function menuItemCount(menu: ParsedMenu): number {

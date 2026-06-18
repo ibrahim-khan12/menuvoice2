@@ -12,11 +12,12 @@
 //   App is silent; user browses the semantic MenuDocument with VoiceOver.
 //   Conversation text is still updated in an aria-live region.
 
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState, type MouseEvent } from 'react';
 import { Screen, SecondaryButton } from '../components';
 import { ScreenProps, Route } from '../nav';
 import { ChatTurn, ParsedMenu } from '../types';
 import { useProfile } from '../state/ProfileContext';
+import { usePause } from '../state/PauseContext';
 import { speak, stopSpeaking, createStreamingSpeech } from '../lib/speech';
 import {
   SpeechManager,
@@ -132,6 +133,7 @@ export default function ConversationScreen({
   route,
 }: ScreenProps & { route: Extract<Route, { name: 'conversation' }> }) {
   const { profile, update } = useProfile();
+  const { paused, registerStopListening } = usePause();
   const { menu, restaurantName } = route;
 
   const [turns, setTurns] = useState<ChatTurn[]>([]);
@@ -149,6 +151,8 @@ export default function ConversationScreen({
   const startMicRef = useRef<() => Promise<void>>(async () => {});
   const speakModeRef = useRef(true);
   speakModeRef.current = speakMode;
+  const pausedRef = useRef(paused);
+  pausedRef.current = paused;
   const actionButtonRef = useRef<HTMLButtonElement>(null);
   const menuHeadingRef = useRef<HTMLHeadingElement>(null);
 
@@ -170,6 +174,10 @@ export default function ConversationScreen({
       setPhase('speaking');
       earconSpeak();
       await speak(opening, profile.ttsVoice);
+      if (pausedRef.current) {
+        setPhase('idle');
+        return;
+      }
       await startMicRef.current();
     })();
     return () => {
@@ -181,7 +189,28 @@ export default function ConversationScreen({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  useEffect(() => {
+    return registerStopListening(() => {
+      speechManagerRef.current?.destroy();
+      speechManagerRef.current = null;
+      setPhase((current) => (current === 'recording' || current === 'speaking' ? 'idle' : current));
+    });
+  }, [registerStopListening]);
+
+  useEffect(() => {
+    if (!paused) return;
+    speechManagerRef.current?.destroy();
+    speechManagerRef.current = null;
+    stopSpeaking();
+    earconThinkingStop();
+    setPhase((current) => (current === 'recording' || current === 'speaking' ? 'idle' : current));
+  }, [paused]);
+
   const startMic = async () => {
+    if (pausedRef.current) {
+      setPhase('idle');
+      return;
+    }
     // Audio must be stopped before opening the mic — otherwise the recognizer
     // hears the app's own voice on iOS Safari.
     stopSpeaking();
@@ -293,6 +322,10 @@ export default function ConversationScreen({
       track('message', 'turn', { content: { role: 'assistant', text: fullReply }, metadata: { turn_index: withReply.length } });
       setLatestAssistant(fullReply);
       setLiveText('');
+      if (pausedRef.current) {
+        setPhase('idle');
+        return;
+      }
       await startMic();
     } else {
       // Silent mode: get reply as text only, no audio.
@@ -337,7 +370,7 @@ export default function ConversationScreen({
       try { navigator.vibrate?.([50]); } catch {}
       await speak(text, profile.ttsVoice);
     }
-    if (listen && speakModeRef.current) await startMic();
+    if (listen && speakModeRef.current && !pausedRef.current) await startMic();
     else setPhase('idle');
   };
 
@@ -357,6 +390,26 @@ export default function ConversationScreen({
       } catch {}
     }
     navigate({ name: 'home' });
+  };
+
+  const interruptAndListen = () => {
+    if (pausedRef.current) return;
+    stopSpeaking('bargein');
+    startMicRef.current();
+  };
+
+  const onConversationSurfaceClick = (event: MouseEvent<HTMLElement>) => {
+    if (phase !== 'speaking') return;
+    const target = event.target as HTMLElement | null;
+    if (!target) return;
+    if (
+      target.closest(
+        'button, a, input, select, textarea, label, [role="button"], [role="link"], [role="menuitem"], [role="radio"], [role="checkbox"], [tabindex]:not([tabindex="-1"])',
+      )
+    ) {
+      return;
+    }
+    interruptAndListen();
   };
 
   const browseHintGiven = useRef(false);
@@ -384,6 +437,14 @@ export default function ConversationScreen({
 
   const displayText = liveText || latestAssistant;
   const indicator = indicatorFor(phase);
+  const conversationSummary =
+    latestUser && displayText
+      ? `Latest exchange. You said: ${latestUser}. MenuVoice said: ${displayText}`
+      : displayText
+        ? `MenuVoice said: ${displayText}`
+        : latestUser
+          ? `You said: ${latestUser}`
+          : 'No conversation yet.';
 
   // Single action whose label and handler derive from the current phase.
   const actionConfig = (() => {
@@ -392,21 +453,21 @@ export default function ConversationScreen({
         return {
           label: 'Stop and talk',
           hint: 'Interrupt and start speaking',
-          disabled: false,
-          onClick: () => { stopSpeaking('bargein'); startMicRef.current(); },
+          unavailable: false,
+          onClick: interruptAndListen,
         };
       case 'idle':
         return {
           label: 'Tap to talk',
           hint: 'Start speaking to MenuVoice',
-          disabled: false,
+          unavailable: false,
           onClick: () => startMic(),
         };
       case 'recording':
         return {
           label: "Tap when you're done",
           hint: 'Submit what you just said without waiting',
-          disabled: false,
+          unavailable: false,
           onClick: () => speechManagerRef.current?.submitNow(),
         };
       case 'thinking':
@@ -414,14 +475,14 @@ export default function ConversationScreen({
         return {
           label: 'One moment…',
           hint: '',
-          disabled: true,
+          unavailable: true,
           onClick: () => {},
         };
       case 'error':
         return {
           label: 'Try again',
           hint: '',
-          disabled: false,
+          unavailable: false,
           onClick: () => { setErrorMsg(''); startMic(); },
         };
     }
@@ -429,6 +490,11 @@ export default function ConversationScreen({
 
   return (
     <Screen>
+      <section
+        className="conversation-layout"
+        onClick={onConversationSurfaceClick}
+        aria-label={phase === 'speaking' ? 'MenuVoice is speaking. Tap empty space to interrupt.' : undefined}
+      >
       <h1 className="heading" style={{ marginTop: 4 }}>{restaurantName}</h1>
 
       {/* Incomplete-menu notice — first thing on the page, one sentence, with
@@ -478,14 +544,11 @@ export default function ConversationScreen({
       {/* Latest exchange — a bounded conversation region. Each message is its
           own bubble in a vertical stack with gaps, so bubbles never overlap each
           other or the controls, no matter how long a reply runs. */}
-      <section className="convo-area" aria-label="Conversation">
+      <section className="convo-area" aria-hidden="true">
         {/* "You said" — live because the app does not speak user words back */}
-        <div aria-live="polite" aria-atomic="true">
+        <div>
           {latestUser && (
-            <div
-              aria-label={`You said: ${latestUser}`}
-              className="turn turn-user"
-            >
+            <div className="turn turn-user">
               <div className="turn-speaker">You</div>
               <div className="turn-text">{latestUser}</div>
             </div>
@@ -516,8 +579,11 @@ export default function ConversationScreen({
       <button
         ref={actionButtonRef}
         className="btn btn-primary"
-        onClick={actionConfig.onClick}
-        disabled={actionConfig.disabled}
+        onClick={() => {
+          if (actionConfig.unavailable) return;
+          actionConfig.onClick();
+        }}
+        aria-disabled={actionConfig.unavailable}
         aria-label={actionConfig.hint ? `${actionConfig.label}. ${actionConfig.hint}` : actionConfig.label}
         style={{ minHeight: 110 }}
       >
@@ -553,6 +619,7 @@ export default function ConversationScreen({
 
       {/* Semantic menu — VoiceOver heading rotor: h1 restaurant → h2 category → h3 item */}
       <MenuDocument menu={menu} headingRef={menuHeadingRef} />
+      </section>
     </Screen>
   );
 }
