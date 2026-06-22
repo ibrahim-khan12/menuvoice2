@@ -60,14 +60,17 @@ function dishLabel(item: ParsedMenu['categories'][number]['items'][number]): str
   return label;
 }
 
-// Semantic menu document — VoiceOver heading rotor hierarchy is intentionally
-// shallow so navigation is fast:
-//   h2 "Full menu" → h2 category (with item count) → h3 dish.
+// Semantic menu document — categories are COLLAPSED by default so VoiceOver does
+// not read through every dish on arrival. Each category is a toggle button; its
+// dishes are only rendered into the DOM when that category is expanded, so they
+// are silent until the user chooses to open a section.
+//
+// When a category is open:
+//   h2 "Full menu" → button category (with item count, aria-expanded) → h3 dish.
 // Each dish is a SINGLE h3 stop whose accessible name (aria-label) reads the
 // whole dish. Price, description, and ingredients are visible for sighted and
 // low-vision users but aria-hidden, so they are NOT separate headings or extra
-// rotor stops. Words like "Description" and "Ingredients" are plain labels, not
-// headings, so the heading rotor jumps cleanly dish to dish.
+// rotor stops.
 function MenuDocument({
   menu,
   headingRef,
@@ -75,49 +78,80 @@ function MenuDocument({
   menu: ParsedMenu;
   headingRef?: React.RefObject<HTMLHeadingElement>;
 }) {
+  // Track which categories are expanded. Empty = all collapsed (default), so
+  // VoiceOver only sees the category buttons until the user opens one.
+  const [openCategories, setOpenCategories] = useState<Record<string, boolean>>({});
+
+  const toggleCategory = (name: string) => {
+    setOpenCategories((prev) => {
+      const next = { ...prev, [name]: !prev[name] };
+      track('conversation', 'category_toggle', {
+        metadata: { category: name, open: next[name] },
+      });
+      return next;
+    });
+  };
+
   return (
-    <section aria-label="Full menu. Browse with VoiceOver heading rotor" style={{ marginTop: 24 }}>
+    <section aria-label="Menu by category. Open a category to read its dishes." style={{ marginTop: 24 }}>
       <h2
         ref={headingRef}
         tabIndex={-1}
-        style={{ fontSize: 22, fontWeight: 700, marginBottom: 4 }}
+        style={{ fontSize: 22, fontWeight: 700, marginBottom: 12 }}
       >
-        Full menu
+        Menu categories
       </h2>
-      {menu.categories.map((cat) => (
-        <section key={cat.name}>
-          <h2 className="browse-category">
-            {cat.name}
-            <span style={{ fontWeight: 400, fontSize: '0.7em' }}>
-              {' '}({cat.items.length} item{cat.items.length === 1 ? '' : 's'})
-            </span>
-          </h2>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginTop: 10, marginBottom: 24 }}>
-            {cat.items.map((item) => (
-              <article key={item.name} className="browse-item">
-                {/* Single rotor stop: the whole dish, spoken from aria-label.
-                    Visible content below is aria-hidden so nothing is read twice
-                    and nothing extra lands in the heading rotor. */}
-                <h3 className="browse-item-name" aria-label={dishLabel(item)}>
-                  <span aria-hidden="true">{item.name}</span>
-                  {item.price && (
-                    <span className="browse-item-price" aria-hidden="true">{' '}{item.price}</span>
-                  )}
-                </h3>
-                {item.description && (
-                  <p className="browse-item-desc" aria-hidden="true">{item.description}</p>
-                )}
-                {item.ingredients && item.ingredients.length > 0 && (
-                  <p className="browse-item-desc" aria-hidden="true">
-                    <span className="browse-item-sub">Ingredients: </span>
-                    {item.ingredients.join(', ')}
-                  </p>
-                )}
-              </article>
-            ))}
-          </div>
-        </section>
-      ))}
+      {menu.categories.map((cat) => {
+        const open = !!openCategories[cat.name];
+        const panelId = `category-panel-${cat.name.replace(/\s+/g, '-').toLowerCase()}`;
+        const count = `${cat.items.length} item${cat.items.length === 1 ? '' : 's'}`;
+        return (
+          <section key={cat.name} style={{ marginBottom: 12 }}>
+            <button
+              className="btn btn-secondary browse-category-toggle"
+              onClick={() => toggleCategory(cat.name)}
+              aria-expanded={open}
+              aria-controls={panelId}
+              aria-label={`${cat.name}, ${count}. ${open ? 'Open. Activate to hide dishes.' : 'Activate to show dishes.'}`}
+              style={{ minHeight: 64, width: '100%', justifyContent: 'space-between', textAlign: 'left' }}
+            >
+              <span aria-hidden="true">{cat.name}</span>
+              <span aria-hidden="true" style={{ fontWeight: 400, fontSize: '0.8em' }}>
+                {count} {open ? '▾' : '▸'}
+              </span>
+            </button>
+            {open && (
+              <div
+                id={panelId}
+                style={{ display: 'flex', flexDirection: 'column', gap: 10, marginTop: 10, marginBottom: 8 }}
+              >
+                {cat.items.map((item) => (
+                  <article key={item.name} className="browse-item">
+                    {/* Single rotor stop: the whole dish, spoken from aria-label.
+                        Visible content below is aria-hidden so nothing is read
+                        twice and nothing extra lands in the heading rotor. */}
+                    <h3 className="browse-item-name" aria-label={dishLabel(item)}>
+                      <span aria-hidden="true">{item.name}</span>
+                      {item.price && (
+                        <span className="browse-item-price" aria-hidden="true">{' '}{item.price}</span>
+                      )}
+                    </h3>
+                    {item.description && (
+                      <p className="browse-item-desc" aria-hidden="true">{item.description}</p>
+                    )}
+                    {item.ingredients && item.ingredients.length > 0 && (
+                      <p className="browse-item-desc" aria-hidden="true">
+                        <span className="browse-item-sub">Ingredients: </span>
+                        {item.ingredients.join(', ')}
+                      </p>
+                    )}
+                  </article>
+                ))}
+              </div>
+            )}
+          </section>
+        );
+      })}
       {menu.notes && (
         <section>
           <h2 className="browse-category">Notes</h2>
@@ -423,7 +457,7 @@ export default function ConversationScreen({
       if (!browseHintGiven.current) {
         browseHintGiven.current = true;
         speak(
-          'Browse mode. To move dish by dish, open your VoiceOver rotor, choose Headings, then swipe up or down. Each dish reads its name, price, and description in one stop.',
+          'Browse mode. The menu is organized by category, like starters, mains, and desserts. Swipe to a category and double tap to open it, then swipe through its dishes. Double tap the category again to close it.',
           profile.ttsVoice,
         );
       }

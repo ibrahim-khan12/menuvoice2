@@ -494,6 +494,14 @@ body {
   text-transform: uppercase;
 }
 
+/* Collapsible category toggle button */
+.browse-category-toggle {
+  display: flex;
+  align-items: center;
+  font-size: 18px;
+  font-weight: 700;
+}
+
 .browse-item {
   padding: 16px;
   background: var(--surface);

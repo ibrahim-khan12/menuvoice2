@@ -3,6 +3,7 @@
 
 import { Screen, Title, PrimaryButton, SecondaryButton } from '../components';
 import { ScreenProps } from '../nav';
+import { DEMO_MENU, DEMO_RESTAURANT_NAME } from '../lib/demoMenu';
 
 export default function HomeScreen({ navigate }: ScreenProps) {
 
@@ -31,6 +32,19 @@ export default function HomeScreen({ navigate }: ScreenProps) {
       </div>
 
       <div className="spacer" />
+
+      <SecondaryButton
+        label="Demo Menu (testing)"
+        hint="Open a preloaded sample menu without using the camera or scan API"
+        onClick={() =>
+          navigate({
+            name: 'conversation',
+            menu: DEMO_MENU,
+            restaurantName: DEMO_RESTAURANT_NAME,
+            source: 'photo',
+          })
+        }
+      />
 
       <SecondaryButton
         label="Settings"
