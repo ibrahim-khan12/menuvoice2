@@ -1,0 +1,27 @@
+# dependencies
+node_modules/
+
+# build output
+dist/
+.vite/
+*.tsbuildinfo
+
+# secrets — never commit
+.env
+.env.local
+.env.*.local
+
+# internal notes (not for the repo)
+OFFICE_HOURS_RESUME.md
+
+# misc
+.DS_Store
+npm-debug.*
+*.log
+_env.txt
+_envcheck.txt
+
+.vercel
+.gstack/
+
+.env*

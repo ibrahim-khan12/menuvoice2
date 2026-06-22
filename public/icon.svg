@@ -1,0 +1,5 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+  <rect width="512" height="512" rx="96" fill="#1a1a1a"/>
+  <text x="256" y="340" font-family="system-ui,sans-serif" font-size="260" font-weight="700" fill="#7bd88f" text-anchor="middle">M</text>
+  <text x="256" y="460" font-family="system-ui,sans-serif" font-size="100" font-weight="600" fill="#7bd88f" text-anchor="middle">Voice</text>
+</svg>
