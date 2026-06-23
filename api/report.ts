@@ -50,6 +50,20 @@ function fmtTs(ts: unknown): string {
   return d.toISOString().replace('T', ' ').replace('.000Z', 'Z').slice(0, 19) + 'Z';
 }
 
+const DEFAULT_EXCLUDED_EMAILS = [
+  'avitaldrel@gmail.com',
+  'anibabug@gmail.com',
+  '2firemaster27@gmail.com',
+];
+
+function excludeList(): string[] {
+  const raw = process.env.REPORT_EXCLUDE_EMAILS ?? '';
+  return Array.from(new Set([
+    ...DEFAULT_EXCLUDED_EMAILS,
+    ...raw.split(',').map((e) => e.trim().toLowerCase()).filter(Boolean),
+  ]));
+}
+
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   const expected = process.env.REPORT_KEY?.trim();
   const provided = (req.query.key as string) ?? '';
@@ -74,6 +88,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   const hours = Number.isFinite(hoursRaw) && hoursRaw > 0 ? Math.min(hoursRaw, 24 * 365) : null;
   const windowClause = hours ? `ts > now() - interval '${hours} hours'` : 'TRUE';
   const windowLabel = hours ? `last ${hours} h` : 'all time';
+  const exclude = excludeList();
+  const keep = `(user_email IS NULL OR lower(user_email) <> ALL($1::text[]))`;
+  const windowAndKeep = `${windowClause} AND ${keep}`;
+  const last24AndKeep = `ts > now() - interval '24 hours' AND ${keep}`;
 
   try {
     const data = await withClient(async (client) => {
@@ -85,24 +103,24 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
             count(DISTINCT user_email) FILTER (WHERE user_email IS NOT NULL) AS users,
             count(*) FILTER (WHERE outcome='failure') AS failures,
             min(ts) AS first_ts, max(ts) AS last_ts
-          FROM events WHERE ${windowClause}
-        `),
+          FROM events WHERE ${windowAndKeep}
+        `, [exclude]),
         client.query(`
           SELECT
             count(*) AS total,
             count(DISTINCT session_id) AS sessions,
             count(*) FILTER (WHERE outcome='failure') AS failures
-          FROM events WHERE ts > now() - interval '24 hours'
-        `),
+          FROM events WHERE ${last24AndKeep}
+        `, [exclude]),
         client.query(`
           SELECT screen, event_name,
                  count(*) AS n,
                  count(*) FILTER (WHERE outcome='failure') AS failures
-          FROM events WHERE ${windowClause}
+          FROM events WHERE ${windowAndKeep}
           GROUP BY screen, event_name
           ORDER BY n DESC
           LIMIT 60
-        `),
+        `, [exclude]),
         client.query(`
           SELECT session_id,
                  min(ts) AS started,
@@ -112,24 +130,24 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
                  count(DISTINCT screen) AS screens,
                  count(*) FILTER (WHERE outcome='failure') AS failures,
                  max(user_email) AS user_email
-          FROM events WHERE ${windowClause}
+          FROM events WHERE ${windowAndKeep}
           GROUP BY session_id
           ORDER BY started DESC
           LIMIT 40
-        `),
+        `, [exclude]),
         client.query(`
           SELECT ts, screen, event_name, session_id, content
           FROM events
-          WHERE outcome='failure' AND ${windowClause}
+          WHERE outcome='failure' AND ${windowAndKeep}
           ORDER BY ts DESC
           LIMIT 40
-        `),
+        `, [exclude]),
         client.query(`
           SELECT ts, screen, event_type, event_name, outcome, duration_ms, session_id
-          FROM events WHERE ${windowClause}
+          FROM events WHERE ${windowAndKeep}
           ORDER BY ts DESC
           LIMIT 60
-        `),
+        `, [exclude]),
       ]);
       return { headline: headline.rows[0], last24: last24.rows[0], byScreen: byScreen.rows, sessions: sessions.rows, failures: failures.rows, recent: recent.rows };
     });

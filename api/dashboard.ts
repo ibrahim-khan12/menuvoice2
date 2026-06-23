@@ -21,6 +21,12 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { createClient } from '@vercel/postgres';
 
+const DEFAULT_EXCLUDED_EMAILS = [
+  'avitaldrel@gmail.com',
+  'anibabug@gmail.com',
+  '2firemaster27@gmail.com',
+];
+
 // Self-contained on purpose: this endpoint depends only on @vercel/postgres (the
 // same surface as the working /api/report). It deliberately does NOT import
 // ./_morningData — doing so pulls that module's whole dependency graph into load,
@@ -51,7 +57,10 @@ function esc(v: unknown): string {
 // /api/report, /api/morning, and /api/dashboard agree.
 function excludeList(): string[] {
   const raw = process.env.REPORT_EXCLUDE_EMAILS ?? '';
-  return raw.split(',').map((e) => e.trim().toLowerCase()).filter(Boolean);
+  return Array.from(new Set([
+    ...DEFAULT_EXCLUDED_EMAILS,
+    ...raw.split(',').map((e) => e.trim().toLowerCase()).filter(Boolean),
+  ]));
 }
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {

@@ -16,8 +16,16 @@ const bucketUnit = hours <= 72 ? 'hour' : 'day';
 const bucketStep = bucketUnit === 'hour' ? '1 hour' : '1 day';
 
 // Same exclusion as api/_morningData.ts excludeList(): drop configured internal/test accounts.
-const exclude = (process.env.REPORT_EXCLUDE_EMAILS ?? '')
-  .split(',').map((e) => e.trim().toLowerCase()).filter(Boolean);
+const DEFAULT_EXCLUDED_EMAILS = [
+  'avitaldrel@gmail.com',
+  'anibabug@gmail.com',
+  '2firemaster27@gmail.com',
+];
+const exclude = Array.from(new Set([
+  ...DEFAULT_EXCLUDED_EMAILS,
+  ...(process.env.REPORT_EXCLUDE_EMAILS ?? '')
+    .split(',').map((e) => e.trim().toLowerCase()).filter(Boolean),
+]));
 const keep = `(user_email IS NULL OR lower(user_email) <> ALL($1::text[]))`;
 const keepE = `(e.user_email IS NULL OR lower(e.user_email) <> ALL($1::text[]))`;
 const keepSignedIn = `user_email IS NOT NULL AND lower(user_email) <> ALL($1::text[])`;
