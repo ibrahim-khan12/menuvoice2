@@ -81,11 +81,20 @@ export interface MorningData {
   website: WebsiteReport;
 }
 
-// Accounts we never want to see in the report. Configure with the
-// REPORT_EXCLUDE_EMAILS env var (comma-separated). Lower-cased + trimmed.
+// Accounts we never want to see in the report. REPORT_EXCLUDE_EMAILS can add
+// more comma-separated accounts; built-ins cover owner/internal usage.
+export const DEFAULT_EXCLUDED_EMAILS = [
+  'avitaldrel@gmail.com',
+  'anibabug@gmail.com',
+  '2firemaster27@gmail.com',
+];
+
 export function excludeList(): string[] {
   const raw = process.env.REPORT_EXCLUDE_EMAILS ?? '';
-  return raw.split(',').map((e) => e.trim().toLowerCase()).filter(Boolean);
+  return Array.from(new Set([
+    ...DEFAULT_EXCLUDED_EMAILS,
+    ...raw.split(',').map((e) => e.trim().toLowerCase()).filter(Boolean),
+  ]));
 }
 
 export function reportEmailRecipients(): string {
