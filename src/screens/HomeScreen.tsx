@@ -29,6 +29,19 @@ export default function HomeScreen({ navigate }: ScreenProps) {
           onClick={() => navigate({ name: 'saved' })}
           style={{ minHeight: 96 }}
         />
+        <SecondaryButton
+          label="Demo Menu"
+          hint="Open a preloaded sample menu without using the camera or scan API"
+          onClick={() =>
+            navigate({
+              name: 'conversation',
+              menu: DEMO_MENU,
+              restaurantName: DEMO_RESTAURANT_NAME,
+              source: 'photo',
+            })
+          }
+          style={{ minHeight: 96 }}
+        />
       </div>
 
       <div className="spacer" />
