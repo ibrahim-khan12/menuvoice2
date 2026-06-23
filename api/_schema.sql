@@ -23,6 +23,13 @@ CREATE INDEX IF NOT EXISTS idx_events_type_ts  ON events (event_type, event_name
 CREATE INDEX IF NOT EXISTS idx_events_session  ON events (session_id, ts);
 CREATE INDEX IF NOT EXISTS idx_events_outcome  ON events (outcome) WHERE outcome = 'failure';
 
+-- The app reads/writes analytics only through serverless functions using the
+-- Postgres connection string. Do not expose raw telemetry through Supabase's
+-- public REST API roles.
+ALTER TABLE events ENABLE ROW LEVEL SECURITY;
+REVOKE ALL ON TABLE events FROM anon, authenticated;
+REVOKE ALL ON SEQUENCE events_id_seq FROM anon, authenticated;
+
 -- Example queries:
 
 -- Menu OCR failures last 7 days, per user

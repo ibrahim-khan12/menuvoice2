@@ -12,6 +12,8 @@ for (const line of readFileSync(new URL('../.env.local', import.meta.url), 'utf8
   if (m && !process.env[m[1]]) process.env[m[1]] = m[2] ?? m[3] ?? '';
 }
 
+process.env.POSTGRES_URL = process.env.POSTGRES_URL_NON_POOLING || process.env.POSTGRES_URL;
+
 if (!process.env.POSTGRES_URL) {
   console.error('FAIL: POSTGRES_URL not found in .env.local');
   process.exit(1);
@@ -41,6 +43,13 @@ try {
     )
   `);
   console.log('OK: schema present');
+
+  await Promise.all([
+    client.query('ALTER TABLE events ENABLE ROW LEVEL SECURITY'),
+    client.query('REVOKE ALL ON TABLE events FROM anon, authenticated'),
+    client.query('REVOKE ALL ON SEQUENCE events_id_seq FROM anon, authenticated'),
+  ]);
+  console.log('OK: RLS enabled and API roles revoked');
 
   const sid = `dbtest-${Date.now()}`;
   await client.query(

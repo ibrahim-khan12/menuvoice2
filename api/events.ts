@@ -40,6 +40,11 @@ async function ensureSchema() {
       client.query('CREATE INDEX IF NOT EXISTS idx_events_session ON events (session_id, ts)'),
       client.query("CREATE INDEX IF NOT EXISTS idx_events_outcome ON events (outcome) WHERE outcome = 'failure'"),
     ]);
+    await Promise.all([
+      client.query('ALTER TABLE events ENABLE ROW LEVEL SECURITY'),
+      client.query('REVOKE ALL ON TABLE events FROM anon, authenticated'),
+      client.query('REVOKE ALL ON SEQUENCE events_id_seq FROM anon, authenticated'),
+    ]);
   });
   schemaReady = true;
 }
