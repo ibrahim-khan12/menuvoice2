@@ -18,7 +18,7 @@ import { ScreenProps, Route } from '../nav';
 import { ChatTurn, ParsedMenu } from '../types';
 import { useProfile } from '../state/ProfileContext';
 import { usePause } from '../state/PauseContext';
-import { speak, speakImmediately, stopSpeaking, createStreamingSpeech } from '../lib/speech';
+import { speak, stopSpeaking, createStreamingSpeech } from '../lib/speech';
 import {
   SpeechManager,
   isSpeechRecognitionSupported,
@@ -207,7 +207,7 @@ export default function ConversationScreen({
       setLatestAssistant(opening);
       setPhase('speaking');
       earconSpeak();
-      await speakImmediately(opening);
+      await speak(opening, profile.ttsVoice);
       if (pausedRef.current) {
         setPhase('idle');
         return;

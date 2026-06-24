@@ -146,23 +146,6 @@ export async function speak(text: string, voice?: string): Promise<void> {
   await playUtterance(text, voice, myEpoch);
 }
 
-// First-response path for menu entry. It speaks with the local browser voice so
-// the user hears guidance immediately instead of waiting on a remote TTS fetch.
-export async function speakImmediately(text: string): Promise<void> {
-  stopSpeaking();
-  if (!_appVoiceOn) return;
-  if (!text.trim()) return;
-  const myEpoch = speechEpoch;
-  const t0 = Date.now();
-  track('speech', 'tts_start', { metadata: { text_len: text.length, voice: 'browser-immediate' } });
-  await playBrowser(text, myEpoch);
-  track('speech', 'tts_end', {
-    outcome: 'success',
-    durationMs: Date.now() - t0,
-    metadata: { via: 'browser-immediate' },
-  });
-}
-
 // Instant, free, local speech for real-time coaching (capture screen).
 // Silenced if the main TTS (speak()) is active.
 // iOS Safari silently drops an utterance queued in the same tick as cancel(),
