@@ -166,8 +166,8 @@
     var autoIdx = 0;
     var camIdx = 0;
     var CAM_PHASES = ['Finding the menu\u2026', 'Hold still\u2026', 'Got it!', 'Reading\u2026'];
-    var CAM_DELAYS = [1600, 1400, 850, 1800];
-    var AUTO_DELAYS = [1900, 1100, 1900, 4200];
+    var CAM_DELAYS = [700, 550, 360, 800];
+    var AUTO_DELAYS = [900, 550, 900, 3000];
 
     /* ── Label trail: active → stays on screen as 'seen' ── */
     function setPhase(pid) {
@@ -333,10 +333,10 @@
       if (progFill) progFill.style.width = (p * 100) + '%';
       if (scrollCue) scrollCue.style.opacity = p > 0.05 ? '0' : '1';
 
-      // Thresholds: scan 0-22%, capture 22-40%, reading 40-56%, convo 56%+
-      if      (p < 0.22) setPhase('scan');
-      else if (p < 0.40) setPhase('capture');
-      else if (p < 0.48) setPhase('reading');
+      // Thresholds: scan 0-12%, capture 12-24%, reading 24-34%, convo 34%+
+      if      (p < 0.12) setPhase('scan');
+      else if (p < 0.24) setPhase('capture');
+      else if (p < 0.34) setPhase('reading');
       else               setPhase('convo');
     }
 
@@ -393,7 +393,15 @@
     form.addEventListener('submit', function (e) {
       e.preventDefault();
       var input = document.getElementById('email');
+      var typeInput = document.getElementById('contact-type');
       var val = (input.value || '').trim();
+      var contactType = typeInput ? typeInput.value : '';
+      if (!contactType) {
+        msg.style.color = 'var(--danger)';
+        msg.textContent = 'Please choose what best describes you.';
+        if (typeInput) typeInput.focus();
+        return;
+      }
       if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(val)) {
         msg.style.color = 'var(--danger)';
         msg.textContent = 'Please enter a valid email address.';

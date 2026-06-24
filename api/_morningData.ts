@@ -51,6 +51,7 @@ export interface Funnel {
 export interface WebsiteSignup {
   email: string;
   ts: string;
+  contactType: string;
   referrer?: string | null;
 }
 
@@ -59,6 +60,7 @@ export interface WebsiteReport {
   visits: number;
   sessions: number;
   signups: number;
+  signupTypes: { type: string; label: string; count: number }[];
   referrers: { referrer: string; count: number }[];
   latestSignups: WebsiteSignup[];
 }
@@ -243,10 +245,25 @@ function cleanReferrer(value: unknown): string {
   }
 }
 
+function contactTypeLabel(value: unknown): string {
+  switch (value) {
+    case 'diner':
+      return 'Diner/user';
+    case 'restaurant':
+      return 'Restaurant/venue';
+    case 'accessibility_org':
+      return 'Accessibility org/funder';
+    case 'other':
+      return 'Other';
+    default:
+      return 'Unknown';
+  }
+}
+
 async function getWebsiteReport(hours: number): Promise<WebsiteReport> {
   const redis = redisFromEnv();
   if (!redis) {
-    return { available: false, visits: 0, sessions: 0, signups: 0, referrers: [], latestSignups: [] };
+    return { available: false, visits: 0, sessions: 0, signups: 0, signupTypes: [], referrers: [], latestSignups: [] };
   }
 
   const since = Date.now() - hours * 60 * 60 * 1000;
@@ -273,14 +290,33 @@ async function getWebsiteReport(hours: number): Promise<WebsiteReport> {
       refs.set(ref, (refs.get(ref) ?? 0) + 1);
     }
 
+    const typeCounts = new Map<string, number>();
+    for (const row of signupRows) {
+      const metadata = row.metadata && typeof row.metadata === 'object'
+        ? row.metadata as Record<string, unknown>
+        : {};
+      const type = typeof row.contact_type === 'string'
+        ? row.contact_type
+        : typeof metadata.contact_type === 'string'
+          ? metadata.contact_type
+          : 'unknown';
+      typeCounts.set(type, (typeCounts.get(type) ?? 0) + 1);
+    }
+
     const latestSignups = signupRows
       .map((row) => {
         const metadata = row.metadata && typeof row.metadata === 'object'
           ? row.metadata as Record<string, unknown>
           : {};
+        const contactType = typeof row.contact_type === 'string'
+          ? row.contact_type
+          : typeof metadata.contact_type === 'string'
+            ? metadata.contact_type
+            : 'unknown';
         return {
           email: typeof row.email === 'string' ? row.email : typeof metadata.email === 'string' ? metadata.email : '',
           ts: typeof row.ts === 'string' ? row.ts : '',
+          contactType,
           referrer: typeof row.referrer === 'string' ? cleanReferrer(row.referrer) : null,
         };
       })
@@ -293,6 +329,9 @@ async function getWebsiteReport(hours: number): Promise<WebsiteReport> {
       visits: visitRows.length,
       sessions: sessionIds.size,
       signups: signupRows.length,
+      signupTypes: Array.from(typeCounts.entries())
+        .map(([type, count]) => ({ type, label: contactTypeLabel(type), count }))
+        .sort((a, b) => b.count - a.count),
       referrers: Array.from(refs.entries())
         .map(([referrer, count]) => ({ referrer, count }))
         .sort((a, b) => b.count - a.count)
@@ -301,7 +340,7 @@ async function getWebsiteReport(hours: number): Promise<WebsiteReport> {
     };
   } catch (err) {
     console.error('[morning] website report unavailable:', err);
-    return { available: false, visits: 0, sessions: 0, signups: 0, referrers: [], latestSignups: [] };
+    return { available: false, visits: 0, sessions: 0, signups: 0, signupTypes: [], referrers: [], latestSignups: [] };
   }
 }
 
@@ -491,13 +530,16 @@ export function renderWebsiteText(w: WebsiteReport): string {
   const lines: string[] = [];
   lines.push('WEBSITE:');
   lines.push(`  ${w.visits} visit(s), ${w.sessions} site session(s), ${w.signups} waitlist/demo request(s)`);
+  if (w.signupTypes.length) {
+    lines.push(`  Request types: ${w.signupTypes.map((t) => `${t.label} ${t.count}`).join(', ')}`);
+  }
   if (w.referrers.length) {
     lines.push(`  Referrers: ${w.referrers.map((r) => `${r.referrer} ${r.count}`).join(', ')}`);
   }
   if (w.latestSignups.length) {
     lines.push('  Latest signups:');
     for (const s of w.latestSignups) {
-      lines.push(`  - ${s.email}  |  ${fmtTs(s.ts)}${s.referrer ? `  |  ${s.referrer}` : ''}`);
+      lines.push(`  - ${s.email}  |  ${contactTypeLabel(s.contactType)}  |  ${fmtTs(s.ts)}${s.referrer ? `  |  ${s.referrer}` : ''}`);
     }
   }
   return lines.join('\n');
@@ -639,10 +681,13 @@ export function renderWebsiteHtml(w: WebsiteReport, ff: string): string {
   const referrers = w.referrers.length
     ? `<div style="font-family:${ff};font-size:12px;color:${C.sub};margin-top:8px">Referrers: ${w.referrers.map((r) => `${esc(r.referrer)} ${r.count}`).join(', ')}</div>`
     : '';
+  const signupTypes = w.signupTypes.length
+    ? `<div style="font-family:${ff};font-size:12px;color:${C.sub};margin-top:8px">Request types: ${w.signupTypes.map((t) => `${esc(t.label)} ${t.count}`).join(', ')}</div>`
+    : '';
   const signups = w.latestSignups.length
     ? `<div style="font-family:${ff};font-size:12px;color:${C.ink};margin-top:10px">
         <strong>Latest requests:</strong><br>
-        ${w.latestSignups.map((s) => `${esc(s.email)} <span style="color:${C.sub}">${esc(fmtTs(s.ts))}${s.referrer ? ` &middot; ${esc(s.referrer)}` : ''}</span>`).join('<br>')}
+        ${w.latestSignups.map((s) => `${esc(s.email)} <span style="color:${C.sub}">&middot; ${esc(contactTypeLabel(s.contactType))} &middot; ${esc(fmtTs(s.ts))}${s.referrer ? ` &middot; ${esc(s.referrer)}` : ''}</span>`).join('<br>')}
        </div>`
     : '';
 
@@ -657,6 +702,7 @@ export function renderWebsiteHtml(w: WebsiteReport, ff: string): string {
           <td style="font-family:${ff};font-size:13px;color:${C.sub}"><div style="font-size:26px;font-weight:800;color:${C.greenDk};line-height:1">${w.signups}</div>requests</td>
         </tr></table>
         ${unavailable}
+        ${signupTypes}
         ${referrers}
         ${signups}
       </td></tr>

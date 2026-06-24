@@ -233,12 +233,20 @@
         <h2 class="display" id="cta-h">Let's get it to the table.</h2>
         <p class="lede">Request a demo, join the pilot list, or tell us your restaurant wants in.</p>
         <form class="cta-form" id="waitlist-form" novalidate>
+          <label for="contact-type" style="position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0)">I am a</label>
+          <select id="contact-type" name="contact_type" aria-describedby="cta-msg cta-privacy" required>
+            <option value="">I am a...</option>
+            <option value="diner">Diner or MenuVoice user</option>
+            <option value="restaurant">Restaurant or venue</option>
+            <option value="accessibility_org">Accessibility org or funder</option>
+            <option value="other">Something else</option>
+          </select>
           <label for="email" style="position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0)">Email</label>
-          <input type="email" id="email" name="email" placeholder="you@email.com" autocomplete="email" required />
+          <input type="email" id="email" name="email" placeholder="you@email.com" autocomplete="email" aria-describedby="cta-msg cta-privacy" required />
           <button type="submit" class="btn btn-primary btn-lg">Request a demo</button>
         </form>
         <p class="cta-msg" id="cta-msg" role="status" aria-live="polite"></p>
-        <p class="cta-mini">No spam. We'll only write about the pilot.</p>
+        <p class="cta-mini" id="cta-privacy">No spam. We'll only write about the pilot.</p>
       </div>
     </div>
   </section>

@@ -261,12 +261,12 @@ h2.display { font-size: clamp(32px, 4.8vw, 60px); }
 .bracket.br{bottom:16px;right:16px;border-left:0;border-top:0;border-bottom-right-radius:6px}
 .coach { position:absolute;top:14px;left:50%;transform:translateX(-50%);background:rgba(0,0,0,0.66);backdrop-filter:blur(6px);border:1px solid var(--success);color:var(--success);font-size:12px;font-weight:700;padding:7px 13px;border-radius:999px;white-space:nowrap;display:flex;align-items:center;gap:7px; }
 .coach .cdot { width:6px;height:6px;border-radius:50%;background:currentColor;flex-shrink:0; }
-.scan-cam .bracket { transition:border-color .5s ease,transform .55s cubic-bezier(.3,.8,.3,1),opacity .5s ease;border-color:rgba(255,255,255,.4);transform:scale(1.16);opacity:.5; }
+.scan-cam .bracket { transition:border-color .25s ease,transform .32s cubic-bezier(.3,.8,.3,1),opacity .25s ease;border-color:rgba(255,255,255,.4);transform:scale(1.16);opacity:.5; }
 .scan-cam[data-phase="2"] .bracket,.scan-cam[data-phase="3"] .bracket { border-color:var(--success);transform:scale(1);opacity:1; }
-.scan-cam .scan-coach { border-color:rgba(255,255,255,.38);color:var(--text-primary);transition:border-color .4s ease,color .4s ease; }
+.scan-cam .scan-coach { border-color:rgba(255,255,255,.38);color:var(--text-primary);transition:border-color .22s ease,color .22s ease; }
 .scan-cam[data-phase="2"] .scan-coach,.scan-cam[data-phase="3"] .scan-coach { border-color:var(--success);color:var(--success); }
 .scan-line { position:absolute;left:8%;right:8%;top:6%;height:2px;opacity:0;background:linear-gradient(90deg,transparent,var(--success),transparent);box-shadow:0 0 14px var(--success); }
-.scan-cam[data-phase="3"] .scan-line { animation:scansweep 1.6s ease-in-out; }
+.scan-cam[data-phase="3"] .scan-line { animation:scansweep .85s ease-in-out; }
 @keyframes scansweep { 0%{top:6%;opacity:0}12%{opacity:1}88%{opacity:1}100%{top:92%;opacity:0} }
 .flash { position:absolute;inset:0;background:#fff;opacity:0;pointer-events:none; }
 .scan-cam[data-phase="2"] .flash { animation:scanflash .6s ease; }
@@ -302,13 +302,13 @@ h2.display { font-size: clamp(32px, 4.8vw, 60px); }
 /* Only animate when parent has .me-playing */
 #ps-read.me-playing .me-row { animation: me-appear 0.28s ease forwards; }
 #ps-read.me-playing .me-row:nth-child(1) { animation-delay: 0.05s; }
-#ps-read.me-playing .me-row:nth-child(2) { animation-delay: 0.22s; }
-#ps-read.me-playing .me-row:nth-child(3) { animation-delay: 0.40s; }
-#ps-read.me-playing .me-row:nth-child(4) { animation-delay: 0.60s; }
-#ps-read.me-playing .me-row:nth-child(5) { animation-delay: 0.78s; }
-#ps-read.me-playing .me-row:nth-child(6) { animation-delay: 0.96s; }
-#ps-read.me-playing .me-row:nth-child(7) { animation-delay: 1.14s; }
-#ps-read.me-playing .me-row:nth-child(8) { animation-delay: 1.32s; }
+#ps-read.me-playing .me-row:nth-child(2) { animation-delay: 0.12s; }
+#ps-read.me-playing .me-row:nth-child(3) { animation-delay: 0.19s; }
+#ps-read.me-playing .me-row:nth-child(4) { animation-delay: 0.26s; }
+#ps-read.me-playing .me-row:nth-child(5) { animation-delay: 0.33s; }
+#ps-read.me-playing .me-row:nth-child(6) { animation-delay: 0.40s; }
+#ps-read.me-playing .me-row:nth-child(7) { animation-delay: 0.47s; }
+#ps-read.me-playing .me-row:nth-child(8) { animation-delay: 0.54s; }
 
 @keyframes me-appear {
   from { opacity: 0; transform: translateX(-5px); background: color-mix(in srgb, var(--accent) 14%, transparent); }
@@ -496,9 +496,10 @@ h2.display { font-size: clamp(32px, 4.8vw, 60px); }
 .cta h2 { margin:0 auto;max-width:18ch; }
 .cta .lede { margin:20px auto 0;text-align:center;max-width:50ch; }
 .cta-form { margin:36px auto 0;display:flex;gap:10px;max-width:480px;flex-wrap:wrap;justify-content:center; }
-.cta-form input { flex:1;min-width:220px;min-height:60px;background:var(--bg-soft);border:1.5px solid var(--border);border-radius:14px;color:var(--text-primary);font-family:var(--font-body);font-size:16px;padding:0 20px;transition:border-color 140ms ease; }
+.cta-form input, .cta-form select { flex:1;min-width:220px;min-height:60px;background:var(--bg-soft);border:1.5px solid var(--border);border-radius:14px;color:var(--text-primary);font-family:var(--font-body);font-size:16px;padding:0 20px;transition:border-color 140ms ease; }
+.cta-form select { cursor:pointer;color:var(--text-secondary); }
 .cta-form input::placeholder { color:var(--text-muted); }
-.cta-form input:focus { outline:none;border-color:var(--accent); }
+.cta-form input:focus, .cta-form select:focus { outline:none;border-color:var(--accent); }
 .cta-form .btn { min-width:168px; }
 .cta-mini { margin-top:18px;font-family:var(--font-mono);font-size:12px;color:var(--text-muted); }
 .cta-msg { margin-top:18px;font-size:15px;color:var(--success);min-height:22px;font-weight:600; }
@@ -748,6 +749,14 @@ h2.display { font-size: clamp(32px, 4.8vw, 60px); }
         <h2 class="display" id="cta-h">Let's get it to the table.</h2>
         <p class="lede">Request a demo, join the pilot list, or tell us your restaurant wants in.</p>
         <form class="cta-form" id="waitlist-form" novalidate>
+          <label for="contact-type" style="position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0)">I am a</label>
+          <select id="contact-type" name="contact_type" aria-describedby="cta-msg cta-privacy" required>
+            <option value="">I am a...</option>
+            <option value="diner">Diner or MenuVoice user</option>
+            <option value="restaurant">Restaurant or venue</option>
+            <option value="accessibility_org">Accessibility org or funder</option>
+            <option value="other">Something else</option>
+          </select>
           <label for="email" style="position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0)">Email</label>
           <input type="email" id="email" name="email" placeholder="you@email.com" autocomplete="email" required />
           <button type="submit" class="btn btn-primary btn-lg">Request a demo</button>
@@ -945,7 +954,7 @@ h2.display { font-size: clamp(32px, 4.8vw, 60px); }
     var camTimer = null;
     var camIdx = 0;
     var CAM_PHASES = ['Finding the menu\u2026', 'Hold still\u2026', 'Got it!', 'Reading\u2026'];
-    var CAM_DELAYS = [1600, 1400, 850, 1800];
+    var CAM_DELAYS = [700, 550, 360, 800];
 
     /* ── Label trail: active → stays on screen as 'seen' ── */
     function setPhase(pid) {
@@ -1069,10 +1078,10 @@ h2.display { font-size: clamp(32px, 4.8vw, 60px); }
       clearLoopTimers();
       convoStarted = false;
       setPhase('scan');
-      loopTimers.push(setTimeout(function () { setPhase('capture'); }, 2200));
-      loopTimers.push(setTimeout(function () { setPhase('reading'); }, 3800));
-      loopTimers.push(setTimeout(function () { setPhase('convo'); }, 5600));
-      loopTimers.push(setTimeout(playSequence, 15000));
+      loopTimers.push(setTimeout(function () { setPhase('capture'); }, 900));
+      loopTimers.push(setTimeout(function () { setPhase('reading'); }, 1650));
+      loopTimers.push(setTimeout(function () { setPhase('convo'); }, 2600));
+      loopTimers.push(setTimeout(playSequence, 10000));
     }
 
     setPhase('scan');
@@ -1127,7 +1136,15 @@ h2.display { font-size: clamp(32px, 4.8vw, 60px); }
     form.addEventListener('submit', function (e) {
       e.preventDefault();
       var input = document.getElementById('email');
+      var typeInput = document.getElementById('contact-type');
       var val = (input.value || '').trim();
+      var contactType = typeInput ? typeInput.value : '';
+      if (!contactType) {
+        msg.style.color = 'var(--danger)';
+        msg.textContent = 'Please choose what best describes you.';
+        if (typeInput) typeInput.focus();
+        return;
+      }
       if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(val)) {
         msg.style.color = 'var(--danger)';
         msg.textContent = 'Please enter a valid email address.';

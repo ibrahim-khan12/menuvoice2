@@ -207,7 +207,7 @@
     var camTimer = null;
     var camIdx = 0;
     var CAM_PHASES = ['Finding the menu\u2026', 'Hold still\u2026', 'Got it!', 'Reading\u2026'];
-    var CAM_DELAYS = [1600, 1400, 850, 1800];
+    var CAM_DELAYS = [700, 550, 360, 800];
 
     /* ── Label trail: active → stays on screen as 'seen' ── */
     function setPhase(pid) {
@@ -327,9 +327,9 @@
           entries.forEach(function (e) {
             if (e.isIntersecting) {
               mio.disconnect();
-              setTimeout(function () { setPhase('capture'); }, 2200);
-              setTimeout(function () { setPhase('reading'); }, 3800);
-              setTimeout(function () { setPhase('convo'); }, 5600);
+              setTimeout(function () { setPhase('capture'); }, 900);
+              setTimeout(function () { setPhase('reading'); }, 1650);
+              setTimeout(function () { setPhase('convo'); }, 2600);
             }
           });
         }, { threshold: 0.18 });
@@ -353,10 +353,10 @@
       if (progFill) progFill.style.width = (p * 100) + '%';
       if (scrollCue) scrollCue.style.opacity = p > 0.05 ? '0' : '1';
 
-      // Thresholds: scan 0-22%, capture 22-40%, reading 40-56%, convo 56%+
-      if      (p < 0.22) setPhase('scan');
-      else if (p < 0.40) setPhase('capture');
-      else if (p < 0.48) setPhase('reading');
+      // Thresholds: scan 0-12%, capture 12-24%, reading 24-34%, convo 34%+
+      if      (p < 0.12) setPhase('scan');
+      else if (p < 0.24) setPhase('capture');
+      else if (p < 0.34) setPhase('reading');
       else               setPhase('convo');
     }
 
@@ -403,7 +403,15 @@
     form.addEventListener('submit', function (e) {
       e.preventDefault();
       var input = document.getElementById('email');
+      var typeInput = document.getElementById('contact-type');
       var val = (input.value || '').trim();
+      var contactType = typeInput ? typeInput.value : '';
+      if (!contactType) {
+        msg.style.color = 'var(--danger)';
+        msg.textContent = 'Please choose what best describes you.';
+        if (typeInput) typeInput.focus();
+        return;
+      }
       if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(val)) {
         msg.style.color = 'var(--danger)';
         msg.textContent = 'Please enter a valid email address.';
@@ -417,6 +425,7 @@
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           email: val,
+          contact_type: contactType,
           session_id: siteSessionId(),
           path: window.location.pathname + window.location.search,
           referrer: document.referrer || ''
