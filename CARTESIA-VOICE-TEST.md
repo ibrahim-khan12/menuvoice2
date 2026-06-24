@@ -27,11 +27,11 @@ OPENAI_API_KEY=<existing OpenAI key>
 REPORT_EMAIL_TO=<report recipient email>
 ```
 
-`/api/tts` tries the Cartesia key slots in order. If Cartesia returns a credit,
-quota, billing, or usage-limit failure for one slot, MenuVoice sends a
-rate-limited alert email that names the key slot and then tries the next slot.
-If every Cartesia key is exhausted, MenuVoice falls back to OpenAI TTS so the
-app can still speak.
+`/api/tts` tries the Cartesia key slots in order. If a slot returns a credit,
+quota, billing, or usage-limit failure, MenuVoice sends a rate-limited alert
+email that names the key slot and then tries the next slot. Other Cartesia
+failures also advance to the next key. If every Cartesia key is exhausted or
+broken, MenuVoice falls back to OpenAI TTS so the app can still speak.
 
 If you prefer one variable, `CARTESIA_API_KEYS` can contain comma-separated keys.
 The older single `CARTESIA_API_KEY` still works as a fallback.

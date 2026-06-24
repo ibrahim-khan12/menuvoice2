@@ -105,11 +105,15 @@ async function synthesizeWithCartesia(body: any): Promise<CartesiaSuccess | null
   const transcript = typeof body?.input === 'string' ? body.input.trim() : '';
   if (keys.length === 0 || !voiceId || !transcript) return null;
 
-  let lastCreditIssue: { status: number; detail: string } | null = null;
+  let lastFailure: { status: number; detail: string } | null = null;
   for (let i = 0; i < keys.length; i++) {
     const key = keys[i];
     const nextKey = keys[i + 1] ?? null;
-    const upstream = await requestCartesiaTts({ key: key.value, voiceId, transcript });
+    const upstream = await requestCartesiaTts({ key: key.value, voiceId, transcript }).catch((error) => {
+      const detail = error?.message ?? String(error);
+      console.warn(`[MenuVoice] Cartesia ${key.label} request failed; trying ${nextKey?.label ?? 'OpenAI fallback'}.`, error);
+      return { ok: false, status: 0, text: async () => detail, arrayBuffer: async () => new ArrayBuffer(0) } as Response;
+    });
 
     if (upstream.ok) {
       return {
@@ -119,23 +123,23 @@ async function synthesizeWithCartesia(body: any): Promise<CartesiaSuccess | null
     }
 
     const text = await upstream.text();
-    if (!looksLikeCartesiaCreditIssue(upstream.status, text)) {
-      throw new Error(text || `Cartesia TTS request failed with HTTP ${upstream.status}.`);
+    lastFailure = { status: upstream.status, detail: text };
+
+    if (looksLikeCartesiaCreditIssue(upstream.status, text)) {
+      await maybeNotifyCartesiaCreditIssue({
+        service: 'tts',
+        status: upstream.status,
+        detail: text,
+        keyLabel: key.label,
+        nextKeyLabel: nextKey?.label ?? null,
+      });
     }
 
-    lastCreditIssue = { status: upstream.status, detail: text };
-    await maybeNotifyCartesiaCreditIssue({
-      service: 'tts',
-      status: upstream.status,
-      detail: text,
-      keyLabel: key.label,
-      nextKeyLabel: nextKey?.label ?? null,
-    });
-    console.warn(`[MenuVoice] Cartesia ${key.label} credit/quota failure; trying ${nextKey?.label ?? 'OpenAI fallback'}.`);
+    console.warn(`[MenuVoice] Cartesia ${key.label} failed with HTTP ${upstream.status}; trying ${nextKey?.label ?? 'OpenAI fallback'}.`);
   }
 
-  if (lastCreditIssue) {
-    throw new Error(`All Cartesia TTS keys exhausted or quota-limited. Last status: ${lastCreditIssue.status}. ${lastCreditIssue.detail}`);
+  if (lastFailure) {
+    throw new Error(`All Cartesia TTS keys failed. Last status: ${lastFailure.status}. ${lastFailure.detail}`);
   }
   return null;
 }
