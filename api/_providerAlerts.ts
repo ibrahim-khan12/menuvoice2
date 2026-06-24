@@ -39,13 +39,13 @@ export function looksLikeCartesiaCreditIssue(status: number, detail: unknown): b
   ].some((needle) => text.includes(needle));
 }
 
-async function shouldSendCartesiaAlert(): Promise<boolean> {
+async function shouldSendCartesiaAlert(keySuffix = 'global'): Promise<boolean> {
   const ttl = alertWindowSeconds();
   const redis = redisFromEnv();
 
   if (redis) {
     try {
-      const key = `${CARTESIA_ALERT_KEY}:${new Date().toISOString().slice(0, 10)}`;
+      const key = `${CARTESIA_ALERT_KEY}:${keySuffix}:${new Date().toISOString().slice(0, 10)}`;
       const first = await redis.set(key, String(Date.now()), { nx: true, ex: ttl });
       return first === 'OK';
     } catch (error) {
@@ -53,12 +53,13 @@ async function shouldSendCartesiaAlert(): Promise<boolean> {
     }
   }
 
-  const g = globalThis as typeof globalThis & { __menuvoiceCartesiaCreditAlertAt?: number };
+  const g = globalThis as typeof globalThis & { __menuvoiceCartesiaCreditAlertAt?: Record<string, number> };
   const now = Date.now();
-  if (g.__menuvoiceCartesiaCreditAlertAt && now - g.__menuvoiceCartesiaCreditAlertAt < ttl * 1000) {
+  g.__menuvoiceCartesiaCreditAlertAt ??= {};
+  if (g.__menuvoiceCartesiaCreditAlertAt[keySuffix] && now - g.__menuvoiceCartesiaCreditAlertAt[keySuffix] < ttl * 1000) {
     return false;
   }
-  g.__menuvoiceCartesiaCreditAlertAt = now;
+  g.__menuvoiceCartesiaCreditAlertAt[keySuffix] = now;
   return true;
 }
 
@@ -66,11 +67,14 @@ export async function maybeNotifyCartesiaCreditIssue(opts: {
   service: 'tts' | 'stt' | 'realtime-stt-token';
   status: number;
   detail: unknown;
+  keyLabel?: string;
+  nextKeyLabel?: string | null;
 }): Promise<void> {
   if (!looksLikeCartesiaCreditIssue(opts.status, opts.detail)) return;
 
   try {
-    if (!(await shouldSendCartesiaAlert())) return;
+    const keyLabel = opts.keyLabel ?? 'unknown';
+    if (!(await shouldSendCartesiaAlert(`${opts.service}:${keyLabel}`))) return;
 
     const generated = new Date().toISOString();
     const detail = String(opts.detail ?? '').slice(0, 1200);
@@ -78,6 +82,8 @@ export async function maybeNotifyCartesiaCreditIssue(opts: {
       'MenuVoice detected a Cartesia credit or quota failure.',
       '',
       `Service: ${opts.service}`,
+      `Key slot: ${keyLabel}`,
+      `Next key: ${opts.nextKeyLabel || 'none available'}`,
       `HTTP status: ${opts.status}`,
       `Time: ${generated}`,
       '',
@@ -91,6 +97,8 @@ export async function maybeNotifyCartesiaCreditIssue(opts: {
       <p>MenuVoice detected a Cartesia credit or quota failure.</p>
       <table cellpadding="6" cellspacing="0" style="border-collapse:collapse">
         <tr><td><strong>Service</strong></td><td>${opts.service}</td></tr>
+        <tr><td><strong>Key slot</strong></td><td>${keyLabel}</td></tr>
+        <tr><td><strong>Next key</strong></td><td>${opts.nextKeyLabel || 'none available'}</td></tr>
         <tr><td><strong>HTTP status</strong></td><td>${opts.status}</td></tr>
         <tr><td><strong>Time</strong></td><td>${generated}</td></tr>
       </table>

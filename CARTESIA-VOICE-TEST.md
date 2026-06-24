@@ -16,13 +16,25 @@ Set these environment variables on a preview deployment for this branch:
 
 ```text
 VITE_AUDIO_PROVIDER=cartesia
-CARTESIA_API_KEY=sk_car_...
-CARTESIA_VOICE_ID=<voice id from Cartesia>
+CARTESIA_API_KEY_1=sk_car_...
+CARTESIA_API_KEY_2=sk_car_...
+CARTESIA_API_KEY_3=sk_car_...
+CARTESIA_API_KEY_4=sk_car_...
+CARTESIA_VOICE_ID=9626c31c-bec5-4cca-baa8-f8ba9e84c8bc
 CARTESIA_TTS_ENABLED=true
 CARTESIA_STT_ENABLED=true
 OPENAI_API_KEY=<existing OpenAI key>
 REPORT_EMAIL_TO=<report recipient email>
 ```
+
+`/api/tts` tries the Cartesia key slots in order. If Cartesia returns a credit,
+quota, billing, or usage-limit failure for one slot, MenuVoice sends a
+rate-limited alert email that names the key slot and then tries the next slot.
+If every Cartesia key is exhausted, MenuVoice falls back to OpenAI TTS so the
+app can still speak.
+
+If you prefer one variable, `CARTESIA_API_KEYS` can contain comma-separated keys.
+The older single `CARTESIA_API_KEY` still works as a fallback.
 
 Optional:
 
