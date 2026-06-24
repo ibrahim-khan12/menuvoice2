@@ -5,6 +5,7 @@ import { synthesizeSpeech, hasApiKey } from './openai';
 import { track } from './telemetry';
 
 const AUDIO_PROVIDER = import.meta.env.VITE_AUDIO_PROVIDER ?? 'openai';
+const TTS_FALLBACK_TIMEOUT_MS = 4000;
 
 // Monotonic counter. stopSpeaking() increments it, invalidating every in-flight
 // playback path in one atomic move — structural guarantee against overlap.
@@ -106,7 +107,7 @@ async function playUtterance(text: string, voice: string | undefined, epoch: num
   track('speech', 'tts_start', { metadata: { text_len: text.length, voice: voice ?? 'default' } });
   if (hasApiKey()) {
     try {
-      const blob = await synthesizeSpeech(text, voice);
+      const blob = await synthesizeSpeechWithFallbackTimeout(text, voice);
       if (epoch !== speechEpoch) return;
       await playBlob(blob, epoch);
       track('speech', 'tts_end', { outcome: 'success', durationMs: Date.now() - t0 });
@@ -122,12 +123,44 @@ async function playUtterance(text: string, voice: string | undefined, epoch: num
   track('speech', 'tts_end', { outcome: 'success', durationMs: Date.now() - t0, metadata: { via: 'browser' } });
 }
 
+function synthesizeSpeechWithFallbackTimeout(text: string, voice?: string): Promise<Blob> {
+  let timeout: ReturnType<typeof setTimeout> | null = null;
+  const timeoutPromise = new Promise<never>((_, reject) => {
+    timeout = setTimeout(() => reject(new Error('tts timeout')), TTS_FALLBACK_TIMEOUT_MS);
+  });
+
+  return Promise.race([synthesizeSpeech(text, voice), timeoutPromise]).finally(() => {
+    if (timeout) clearTimeout(timeout);
+  });
+}
+
+function prefetchSpeech(text: string, voice?: string): Promise<Blob | null> {
+  return synthesizeSpeechWithFallbackTimeout(text, voice).catch(() => null);
+}
+
 export async function speak(text: string, voice?: string): Promise<void> {
   stopSpeaking();
   if (!_appVoiceOn) return;
   if (!text.trim()) return;
   const myEpoch = speechEpoch;
   await playUtterance(text, voice, myEpoch);
+}
+
+// First-response path for menu entry. It speaks with the local browser voice so
+// the user hears guidance immediately instead of waiting on a remote TTS fetch.
+export async function speakImmediately(text: string): Promise<void> {
+  stopSpeaking();
+  if (!_appVoiceOn) return;
+  if (!text.trim()) return;
+  const myEpoch = speechEpoch;
+  const t0 = Date.now();
+  track('speech', 'tts_start', { metadata: { text_len: text.length, voice: 'browser-immediate' } });
+  await playBrowser(text, myEpoch);
+  track('speech', 'tts_end', {
+    outcome: 'success',
+    durationMs: Date.now() - t0,
+    metadata: { via: 'browser-immediate' },
+  });
 }
 
 // Instant, free, local speech for real-time coaching (capture screen).
@@ -195,6 +228,14 @@ export function createStreamingSpeech(
   voice?: string,
   opts?: { onSpeakingStart?: () => void },
 ): StreamingSpeechHandle {
+  stopSpeaking();
+  if (!_appVoiceOn) {
+    return {
+      push() {},
+      finish: async () => {},
+    };
+  }
+
   // Capture epoch at creation. Any stopSpeaking() call after this point
   // increments speechEpoch, making myEpoch !== speechEpoch — drain bails out.
   const myEpoch = speechEpoch;
@@ -226,13 +267,13 @@ export function createStreamingSpeech(
   let drainDone: (() => void) | null = null;
 
   // Prefetch: TTS request started in parallel with the previous sentence playing.
-  let prefetchedBlob: Promise<Blob> | null = null;
+  let prefetchedBlob: Promise<Blob | null> | null = null;
   let prefetchedFor: string | null = null;
 
   function startPrefetch(text: string) {
     if (!hasApiKey() || prefetchedFor === text) return;
     prefetchedFor = text;
-    prefetchedBlob = synthesizeSpeech(text, voice);
+    prefetchedBlob = prefetchSpeech(text, voice);
   }
 
   async function drain() {
@@ -254,11 +295,13 @@ export function createStreamingSpeech(
         try {
           let blob: Blob;
           if (prefetchedFor === sentence && prefetchedBlob) {
-            blob = await prefetchedBlob;
+            const prefetched = await prefetchedBlob;
             prefetchedBlob = null;
             prefetchedFor = null;
+            if (!prefetched) throw new Error('prefetched TTS unavailable');
+            blob = prefetched;
           } else {
-            blob = await synthesizeSpeech(sentence, voice);
+            blob = await synthesizeSpeechWithFallbackTimeout(sentence, voice);
           }
           if (myEpoch !== speechEpoch) { cancelled = true; break; }
           await playBlob(blob, myEpoch);

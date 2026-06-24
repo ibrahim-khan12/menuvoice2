@@ -47,12 +47,45 @@ const SCREENS = [
   { name: 'find',       ls: { 'menuvoice.profile.v1': PROFILE }, click: 'Find a Menu' },
   { name: 'saved',      ls: { 'menuvoice.profile.v1': PROFILE, 'menuvoice.savedRestaurants.v1': SAVED }, click: 'Saved Restaurants' },
   { name: 'settings',   ls: { 'menuvoice.profile.v1': PROFILE }, click: 'Settings' },
+  { name: 'demo-browse', ls: { 'menuvoice.profile.v1': PROFILE }, demoBrowse: true, screenshot: false },
 ];
 
 const SCREENSHOTS_DIR = join(__dirname, 'screenshots');
 mkdirSync(SCREENSHOTS_DIR, { recursive: true });
 
 const CHROMIUM_PATH = '/opt/pw-browsers/chromium-1194/chrome-linux/chrome';
+
+async function assertCount(locator, expected, message) {
+  const count = await locator.count();
+  if (count !== expected) {
+    throw new Error(`${message} Expected ${expected}, got ${count}.`);
+  }
+}
+
+async function assertDemoBrowseSemantics(page) {
+  await assertCount(
+    page.getByRole('heading', { name: /^Starters, 4 items$/ }),
+    1,
+    'Category toggles must be heading rotor stops.'
+  );
+  await assertCount(
+    page.getByRole('heading', { name: /Crispy Calamari/i }),
+    0,
+    'Dish items must not be heading rotor stops.'
+  );
+
+  await page.getByRole('button', { name: /^Starters, 4 items\./ }).click();
+  await assertCount(
+    page.getByRole('listitem', { name: /Crispy Calamari, \$13\./ }),
+    1,
+    'Opened categories must expose dishes as list items.'
+  );
+  await assertCount(
+    page.getByRole('listitem', { name: /Truffle Parmesan Fries, \$9\.50\./ }),
+    1,
+    'Demo menu should include a cents-priced item in browse mode.'
+  );
+}
 
 async function auditScreen(browser, screen) {
   const context = await browser.newContext();
@@ -78,7 +111,20 @@ async function auditScreen(browser, screen) {
   }
 
   // Click navigation target if needed
-  if (screen.click) {
+  if (screen.demoBrowse) {
+    try {
+      await page.getByRole('button', { name: 'Settings' }).click({ timeout: 5000 });
+      await page.waitForTimeout(500);
+      await page.getByRole('button', { name: 'Demo Menu' }).click({ timeout: 5000 });
+      await page.waitForTimeout(1500);
+      await page.getByRole('button', { name: /switch to browse mode/i }).click({ timeout: 5000 });
+      await page.waitForTimeout(500);
+      await assertDemoBrowseSemantics(page);
+    } catch (e) {
+      console.warn(`  [warn] Demo browse semantic check failed: ${e.message}`);
+      throw e;
+    }
+  } else if (screen.click) {
     try {
       // Find by accessible name (button text / aria-label)
       const btn = page.getByRole('button', { name: screen.click }).first();
@@ -90,10 +136,12 @@ async function auditScreen(browser, screen) {
   }
 
   // Screenshot
-  await page.screenshot({
-    path: join(SCREENSHOTS_DIR, `${screen.name}.png`),
-    fullPage: true,
-  });
+  if (screen.screenshot !== false) {
+    await page.screenshot({
+      path: join(SCREENSHOTS_DIR, `${screen.name}.png`),
+      fullPage: true,
+    });
+  }
 
   // Run axe
   let results;

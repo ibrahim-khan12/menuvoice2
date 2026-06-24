@@ -35,6 +35,12 @@ export const DEMO_MENU: ParsedMenu = {
           price: '$12',
           ingredients: ['chicken', 'chili', 'paprika', 'buttermilk', 'garlic'],
         },
+        {
+          name: 'Truffle Parmesan Fries',
+          description: 'Hand-cut fries with parmesan, parsley, and truffle oil.',
+          price: '$9.50',
+          ingredients: ['potato', 'parmesan', 'parsley', 'truffle oil'],
+        },
       ],
     },
     {
@@ -137,6 +143,12 @@ export const DEMO_MENU: ParsedMenu = {
           description: 'Slow-steeped, served over ice.',
           price: '$5',
           ingredients: ['coffee'],
+        },
+        {
+          name: 'Sparkling Limeade',
+          description: 'Fresh lime, soda water, and simple syrup over ice.',
+          price: '$4.75',
+          ingredients: ['lime', 'soda water', 'sugar'],
         },
       ],
     },

@@ -18,7 +18,7 @@ import { ScreenProps, Route } from '../nav';
 import { ChatTurn, ParsedMenu } from '../types';
 import { useProfile } from '../state/ProfileContext';
 import { usePause } from '../state/PauseContext';
-import { speak, stopSpeaking, createStreamingSpeech } from '../lib/speech';
+import { speak, speakImmediately, stopSpeaking, createStreamingSpeech } from '../lib/speech';
 import {
   SpeechManager,
   isSpeechRecognitionSupported,
@@ -46,10 +46,9 @@ const REPEAT_PHRASES = [
   'repeat that', 'say that again', 'what did you say', 'say it again', 'pardon', 'come again',
 ];
 
-// One dish heading's spoken text: name, price, description, and ingredients
-// folded into a single natural line. This is the dish's accessible name, so a
-// VoiceOver user gets the whole dish in ONE rotor stop. Price is read as part of
-// the dish, never as its own stop.
+// One dish item's spoken text: name, price, description, and ingredients folded
+// into a single natural line. Price is read as part of the dish, never as its
+// own stop.
 function dishLabel(item: ParsedMenu['categories'][number]['items'][number]): string {
   let label = item.name;
   if (item.price) label += `, ${item.price}`;
@@ -60,17 +59,15 @@ function dishLabel(item: ParsedMenu['categories'][number]['items'][number]): str
   return label;
 }
 
-// Semantic menu document — categories are COLLAPSED by default so VoiceOver does
-// not read through every dish on arrival. Each category is a toggle button; its
-// dishes are only rendered into the DOM when that category is expanded, so they
-// are silent until the user chooses to open a section.
+// Semantic menu document. Categories are collapsed by default so VoiceOver does
+// not read through every dish on arrival. Each category heading contains the
+// expand/collapse button, and dishes only render after the category is open.
 //
 // When a category is open:
-//   h2 "Full menu" → button category (with item count, aria-expanded) → h3 dish.
-// Each dish is a SINGLE h3 stop whose accessible name (aria-label) reads the
-// whole dish. Price, description, and ingredients are visible for sighted and
-// low-vision users but aria-hidden, so they are NOT separate headings or extra
-// rotor stops.
+//   h2 "Menu categories" -> h3 category button -> list item dish.
+// Categories are heading rotor stops. Dishes are regular list items with one
+// accessible name, so left/right swipes move through dishes after a category is
+// opened.
 function MenuDocument({
   menu,
   headingRef,
@@ -107,7 +104,8 @@ function MenuDocument({
         const count = `${cat.items.length} item${cat.items.length === 1 ? '' : 's'}`;
         return (
           <section key={cat.name} style={{ marginBottom: 12 }}>
-            <button
+            <h3 className="browse-category-heading" aria-label={`${cat.name}, ${count}`}>
+              <button
               className="btn btn-secondary browse-category-toggle"
               onClick={() => toggleCategory(cat.name)}
               aria-expanded={open}
@@ -119,23 +117,25 @@ function MenuDocument({
               <span aria-hidden="true" style={{ fontWeight: 400, fontSize: '0.8em' }}>
                 {count} {open ? '▾' : '▸'}
               </span>
-            </button>
+              </button>
+            </h3>
             {open && (
-              <div
+              <ul
                 id={panelId}
+                className="browse-item-list"
                 style={{ display: 'flex', flexDirection: 'column', gap: 10, marginTop: 10, marginBottom: 8 }}
               >
                 {cat.items.map((item) => (
-                  <article key={item.name} className="browse-item">
-                    {/* Single rotor stop: the whole dish, spoken from aria-label.
-                        Visible content below is aria-hidden so nothing is read
-                        twice and nothing extra lands in the heading rotor. */}
-                    <h3 className="browse-item-name" aria-label={dishLabel(item)}>
+                  <li key={item.name} className="browse-item" aria-label={dishLabel(item)}>
+                    {/* Single list item: the whole dish, spoken from aria-label.
+                        Visible content is aria-hidden so it is not read twice
+                        and does not land in the heading rotor. */}
+                    <p className="browse-item-name" aria-hidden="true">
                       <span aria-hidden="true">{item.name}</span>
                       {item.price && (
                         <span className="browse-item-price" aria-hidden="true">{' '}{item.price}</span>
                       )}
-                    </h3>
+                    </p>
                     {item.description && (
                       <p className="browse-item-desc" aria-hidden="true">{item.description}</p>
                     )}
@@ -145,9 +145,9 @@ function MenuDocument({
                         {item.ingredients.join(', ')}
                       </p>
                     )}
-                  </article>
+                  </li>
                 ))}
-              </div>
+              </ul>
             )}
           </section>
         );
@@ -207,7 +207,7 @@ export default function ConversationScreen({
       setLatestAssistant(opening);
       setPhase('speaking');
       earconSpeak();
-      await speak(opening, profile.ttsVoice);
+      await speakImmediately(opening);
       if (pausedRef.current) {
         setPhase('idle');
         return;
