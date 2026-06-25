@@ -17,6 +17,7 @@ const DEFAULT_EXCLUDED_EMAILS = [
   'anibabug@gmail.com',
   '2firemaster27@gmail.com',
   'mibrahim.dev17@gmail.com',
+  'ik8072369@gmail.com',
 ];
 const exclude = Array.from(new Set([
   ...DEFAULT_EXCLUDED_EMAILS,
