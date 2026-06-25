@@ -126,7 +126,8 @@ https://<deployment>/api/morning?key=<REPORT_KEY>
   login attaches the email) are NOT counted as a separate "anonymous" user — they
   belong to whichever account the session resolves to. There is no anonymous metric.
 - **Internal/test accounts are excluded.** Owner/internal defaults are
-  `avitaldrel@gmail.com`, `anibabug@gmail.com`, and `2firemaster27@gmail.com`.
+  `avitaldrel@gmail.com`, `anibabug@gmail.com`, `2firemaster27@gmail.com`, and
+  `mibrahim.dev17@gmail.com`.
   Add more via `REPORT_EXCLUDE_EMAILS` when needed.
   Use comma-separated addresses, for example `internal@example.com,qa@example.com`.
 - Window: `?hours=N` or `?days=N` (default 24h). Output: HTML (default), `?format=text` (cron/email friendly), or `?format=json`.

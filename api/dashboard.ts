@@ -25,6 +25,7 @@ const DEFAULT_EXCLUDED_EMAILS = [
   'avitaldrel@gmail.com',
   'anibabug@gmail.com',
   '2firemaster27@gmail.com',
+  'mibrahim.dev17@gmail.com',
 ];
 
 // Self-contained on purpose: this endpoint depends only on @vercel/postgres (the

@@ -54,6 +54,7 @@ const DEFAULT_EXCLUDED_EMAILS = [
   'avitaldrel@gmail.com',
   'anibabug@gmail.com',
   '2firemaster27@gmail.com',
+  'mibrahim.dev17@gmail.com',
 ];
 
 function excludeList(): string[] {
