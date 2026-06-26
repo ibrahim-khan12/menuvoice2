@@ -166,8 +166,8 @@
     var autoIdx = 0;
     var camIdx = 0;
     var CAM_PHASES = ['Finding the menu\u2026', 'Hold still\u2026', 'Got it!', 'Reading\u2026'];
-    var CAM_DELAYS = [1600, 1400, 850, 1800];
-    var AUTO_DELAYS = [1900, 1100, 1900, 4200];
+    var CAM_DELAYS = [220, 220, 180, 320];
+    var AUTO_DELAYS = [250, 450, 600, 2200];
 
     /* ── Label trail: active → stays on screen as 'seen' ── */
     function setPhase(pid) {
@@ -333,10 +333,10 @@
       if (progFill) progFill.style.width = (p * 100) + '%';
       if (scrollCue) scrollCue.style.opacity = p > 0.05 ? '0' : '1';
 
-      // Thresholds: scan 0-22%, capture 22-40%, reading 40-56%, convo 56%+
-      if      (p < 0.22) setPhase('scan');
-      else if (p < 0.40) setPhase('capture');
-      else if (p < 0.48) setPhase('reading');
+      // Thresholds: scan 0-4%, capture 4-10%, reading 10-16%, convo 16%+
+      if      (p < 0.04) setPhase('scan');
+      else if (p < 0.10) setPhase('capture');
+      else if (p < 0.16) setPhase('reading');
       else               setPhase('convo');
     }
 

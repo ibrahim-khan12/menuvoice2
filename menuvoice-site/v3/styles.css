@@ -250,12 +250,12 @@ h2.display { font-size: clamp(32px, 4.8vw, 60px); }
 .bracket.br{bottom:16px;right:16px;border-left:0;border-top:0;border-bottom-right-radius:6px}
 .coach { position:absolute;top:14px;left:50%;transform:translateX(-50%);background:rgba(0,0,0,0.66);backdrop-filter:blur(6px);border:1px solid var(--success);color:var(--success);font-size:12px;font-weight:700;padding:7px 13px;border-radius:999px;white-space:nowrap;display:flex;align-items:center;gap:7px; }
 .coach .cdot { width:6px;height:6px;border-radius:50%;background:currentColor;flex-shrink:0; }
-.scan-cam .bracket { transition:border-color .5s ease,transform .55s cubic-bezier(.3,.8,.3,1),opacity .5s ease;border-color:rgba(255,255,255,.4);transform:scale(1.16);opacity:.5; }
+.scan-cam .bracket { transition:border-color .12s ease,transform .16s cubic-bezier(.3,.8,.3,1),opacity .12s ease;border-color:rgba(255,255,255,.4);transform:scale(1.16);opacity:.5; }
 .scan-cam[data-phase="2"] .bracket,.scan-cam[data-phase="3"] .bracket { border-color:var(--success);transform:scale(1);opacity:1; }
-.scan-cam .scan-coach { border-color:rgba(255,255,255,.38);color:var(--text-primary);transition:border-color .4s ease,color .4s ease; }
+.scan-cam .scan-coach { border-color:rgba(255,255,255,.38);color:var(--text-primary);transition:border-color .12s ease,color .12s ease; }
 .scan-cam[data-phase="2"] .scan-coach,.scan-cam[data-phase="3"] .scan-coach { border-color:var(--success);color:var(--success); }
 .scan-line { position:absolute;left:8%;right:8%;top:6%;height:2px;opacity:0;background:linear-gradient(90deg,transparent,var(--success),transparent);box-shadow:0 0 14px var(--success); }
-.scan-cam[data-phase="3"] .scan-line { animation:scansweep 1.6s ease-in-out; }
+.scan-cam[data-phase="3"] .scan-line { animation:scansweep .42s ease-in-out; }
 @keyframes scansweep { 0%{top:6%;opacity:0}12%{opacity:1}88%{opacity:1}100%{top:92%;opacity:0} }
 .flash { position:absolute;inset:0;background:#fff;opacity:0;pointer-events:none; }
 .scan-cam[data-phase="2"] .flash { animation:scanflash .6s ease; }
@@ -291,13 +291,13 @@ h2.display { font-size: clamp(32px, 4.8vw, 60px); }
 /* Only animate when parent has .me-playing */
 #ps-read.me-playing .me-row { animation: me-appear 0.28s ease forwards; }
 #ps-read.me-playing .me-row:nth-child(1) { animation-delay: 0.05s; }
-#ps-read.me-playing .me-row:nth-child(2) { animation-delay: 0.22s; }
-#ps-read.me-playing .me-row:nth-child(3) { animation-delay: 0.40s; }
-#ps-read.me-playing .me-row:nth-child(4) { animation-delay: 0.60s; }
-#ps-read.me-playing .me-row:nth-child(5) { animation-delay: 0.78s; }
-#ps-read.me-playing .me-row:nth-child(6) { animation-delay: 0.96s; }
-#ps-read.me-playing .me-row:nth-child(7) { animation-delay: 1.14s; }
-#ps-read.me-playing .me-row:nth-child(8) { animation-delay: 1.32s; }
+#ps-read.me-playing .me-row:nth-child(2) { animation-delay: 0.06s; }
+#ps-read.me-playing .me-row:nth-child(3) { animation-delay: 0.09s; }
+#ps-read.me-playing .me-row:nth-child(4) { animation-delay: 0.12s; }
+#ps-read.me-playing .me-row:nth-child(5) { animation-delay: 0.15s; }
+#ps-read.me-playing .me-row:nth-child(6) { animation-delay: 0.18s; }
+#ps-read.me-playing .me-row:nth-child(7) { animation-delay: 0.21s; }
+#ps-read.me-playing .me-row:nth-child(8) { animation-delay: 0.24s; }
 
 @keyframes me-appear {
   from { opacity: 0; transform: translateX(-5px); background: color-mix(in srgb, var(--accent) 14%, transparent); }
@@ -359,7 +359,7 @@ h2.display { font-size: clamp(32px, 4.8vw, 60px); }
 
 /* ── DEMO SECTION ── */
 .demo-section {
-  height: 260vh;
+  height: 140vh;
   position: relative;
 }
 .demo-sticky {
