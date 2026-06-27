@@ -1,5 +1,5 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
-import { maybeNotifyCartesiaCreditIssue } from './_providerAlerts.js';
+import { withCartesiaKey } from './_cartesia.js';
 
 const CARTESIA_VERSION = '2026-03-01';
 
@@ -36,32 +36,32 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 }
 
 async function synthesizeWithCartesia(body: any): Promise<Buffer | null> {
-  const key = process.env.CARTESIA_API_KEY;
   const voiceId = process.env.CARTESIA_VOICE_ID;
   const transcript = typeof body?.input === 'string' ? body.input.trim() : '';
-  if (!key || !voiceId || !transcript) return null;
+  if (!voiceId || !transcript) return null;
 
-  const upstream = await fetch('https://api.cartesia.ai/tts/bytes', {
-    method: 'POST',
-    headers: {
-      Authorization: `Bearer ${key}`,
-      'Cartesia-Version': CARTESIA_VERSION,
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify({
-      model_id: process.env.CARTESIA_TTS_MODEL || 'sonic-3.5',
-      transcript,
-      voice: { mode: 'id', id: voiceId },
-      language: 'en',
-      output_format: { container: 'mp3', sample_rate: 44100, bit_rate: 128000 },
-      generation_config: { speed: Number(process.env.CARTESIA_TTS_SPEED || 1) },
-    }),
+  const payload = JSON.stringify({
+    model_id: process.env.CARTESIA_TTS_MODEL || 'sonic-3.5',
+    transcript,
+    voice: { mode: 'id', id: voiceId },
+    language: 'en',
+    output_format: { container: 'mp3', sample_rate: 44100, bit_rate: 128000 },
+    generation_config: { speed: Number(process.env.CARTESIA_TTS_SPEED || 1) },
   });
 
-  if (!upstream.ok) {
-    const text = await upstream.text();
-    await maybeNotifyCartesiaCreditIssue({ service: 'tts', status: upstream.status, detail: text });
-    throw new Error(text);
-  }
+  // Rotate across Cartesia keys; null means every key is out of credits.
+  const upstream = await withCartesiaKey('tts', (key) =>
+    fetch('https://api.cartesia.ai/tts/bytes', {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${key}`,
+        'Cartesia-Version': CARTESIA_VERSION,
+        'Content-Type': 'application/json',
+      },
+      body: payload,
+    }),
+  );
+  // Null (all keys exhausted) or any non-OK response -> fall back to OpenAI.
+  if (!upstream || !upstream.ok) return null;
   return Buffer.from(await upstream.arrayBuffer());
 }

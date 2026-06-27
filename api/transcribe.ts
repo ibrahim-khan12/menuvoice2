@@ -1,5 +1,5 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
-import { maybeNotifyCartesiaCreditIssue } from './_providerAlerts.js';
+import { cartesiaApiKeys, withCartesiaKey } from './_cartesia.js';
 
 // Vercel's default body parser can't handle multipart. We stream the raw body
 // straight through to OpenAI, preserving the Content-Type (with boundary).
@@ -49,28 +49,34 @@ async function cartesiaToken(res: VercelResponse) {
     return res.status(404).json({ error: 'Cartesia realtime STT is not enabled.' });
   }
 
-  const key = process.env.CARTESIA_API_KEY;
-  if (!key) return res.status(500).json({ error: 'No Cartesia API key configured.' });
+  if (cartesiaApiKeys().length === 0) {
+    return res.status(500).json({ error: 'No Cartesia API key configured.' });
+  }
 
-  const upstream = await fetch('https://api.cartesia.ai/access-token', {
-    method: 'POST',
-    headers: {
-      Authorization: `Bearer ${key}`,
-      'Cartesia-Version': CARTESIA_VERSION,
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify({
-      grants: { stt: true },
-      expires_in: 60,
+  // Rotate across keys; null means every key is out of credits.
+  const upstream = await withCartesiaKey('realtime-stt-token', (key) =>
+    fetch('https://api.cartesia.ai/access-token', {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${key}`,
+        'Cartesia-Version': CARTESIA_VERSION,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        grants: { stt: true },
+        expires_in: 60,
+      }),
     }),
-  });
+  );
+  if (!upstream) {
+    return res.status(402).json({ error: 'All Cartesia keys are out of credits.' });
+  }
 
   const raw = await upstream.text().catch(() => '');
   let data: any = {};
   try { data = raw ? JSON.parse(raw) : {}; } catch { data = { raw }; }
   if (!upstream.ok) {
     const error = data?.message ?? data?.error ?? data?.title ?? data?.raw ?? 'Cartesia token request failed.';
-    await maybeNotifyCartesiaCreditIssue({ service: 'realtime-stt-token', status: upstream.status, detail: error });
     console.warn('Cartesia access-token failed:', { status: upstream.status, error });
     return res.status(upstream.status).json({ error });
   }
@@ -81,25 +87,24 @@ async function cartesiaToken(res: VercelResponse) {
 }
 
 async function transcribeWithCartesia(contentType: string, body: Buffer): Promise<{ text: string } | null> {
-  const key = process.env.CARTESIA_API_KEY;
-  if (!key || !contentType.includes('multipart/form-data')) return null;
+  if (!contentType.includes('multipart/form-data')) return null;
 
-  const upstream = await fetch('https://api.cartesia.ai/stt', {
-    method: 'POST',
-    headers: {
-      Authorization: `Bearer ${key}`,
-      'Cartesia-Version': CARTESIA_VERSION,
-      'Content-Type': contentType,
-    },
-    body: body as unknown as BodyInit,
-  });
+  // Rotate across keys; null/non-OK -> caller falls back to OpenAI Whisper.
+  const upstream = await withCartesiaKey('stt', (key) =>
+    fetch('https://api.cartesia.ai/stt', {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${key}`,
+        'Cartesia-Version': CARTESIA_VERSION,
+        'Content-Type': contentType,
+      },
+      body: body as unknown as BodyInit,
+    }),
+  );
+  if (!upstream || !upstream.ok) return null;
+
   const raw = await upstream.text().catch(() => '');
   let data: any = {};
   try { data = raw ? JSON.parse(raw) : {}; } catch { data = { raw }; }
-  if (!upstream.ok) {
-    const error = data?.message ?? data?.error ?? data?.title ?? data?.raw ?? raw ?? 'Cartesia STT request failed.';
-    await maybeNotifyCartesiaCreditIssue({ service: 'stt', status: upstream.status, detail: error });
-    throw new Error(typeof error === 'string' ? error : JSON.stringify(error));
-  }
   return { text: (data?.text ?? '').trim() };
 }

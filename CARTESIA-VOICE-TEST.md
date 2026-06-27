@@ -33,6 +33,24 @@ CARTESIA_ALERT_EMAIL_TO=2firemaster27@gmail.com
 CARTESIA_ALERT_COOLDOWN_SECONDS=21600
 ```
 
+### Multiple Cartesia keys (automatic failover)
+
+Free Cartesia credits run out fast, so the server can hold several keys and roll
+to the next one the moment a key hits a credit/quota wall. Supply keys in any of
+these ways (they are all merged and de-duplicated):
+
+```text
+CARTESIA_API_KEYS=sk_car_first,sk_car_second,sk_car_third
+CARTESIA_API_KEY=sk_car_single        # still works, treated as one more key
+CARTESIA_API_KEY_1=sk_car_a           # numbered keys 1..10 also picked up
+CARTESIA_API_KEY_2=sk_car_b
+```
+
+Rotation applies to TTS, STT, and the realtime STT token. A key that returns a
+credit error (HTTP 402 or a credit/quota/billing message) is skipped for ~6
+hours, then retried. Only when *every* key is exhausted does the app fall back to
+OpenAI and send the single credit alert email.
+
 Cartesia credit and quota failures email `CARTESIA_ALERT_EMAIL_TO`, falling back to `REPORT_EMAIL_TO`, then `2firemaster27@gmail.com`. Alerts use the existing email transport: `RESEND_API_KEY` with optional `RESEND_FROM`, or `GMAIL_USER` plus `GMAIL_APP_PASSWORD`.
 
 To test only the voice output first, set `CARTESIA_TTS_ENABLED=true` and leave `CARTESIA_STT_ENABLED=false`.

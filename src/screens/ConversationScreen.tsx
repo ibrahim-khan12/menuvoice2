@@ -18,7 +18,7 @@ import { ScreenProps, Route } from '../nav';
 import { ChatTurn, ParsedMenu } from '../types';
 import { useProfile } from '../state/ProfileContext';
 import { usePause } from '../state/PauseContext';
-import { speak, stopSpeaking, createStreamingSpeech } from '../lib/speech';
+import { speak, stopSpeaking, createStreamingSpeech, unlockAudio } from '../lib/speech';
 import {
   SpeechManager,
   isSpeechRecognitionSupported,
@@ -255,7 +255,12 @@ export default function ConversationScreen({
       if (!pausedRef.current) {
         setPhase('speaking');
         earconSpeak();
-        await speak(opening, profile.ttsVoice);
+        // Stream the opening sentence-by-sentence so the first sentence starts
+        // playing while the rest is still synthesizing — much faster to first
+        // audio than synthesizing the whole opening line up front.
+        const opener = createStreamingSpeech(profile.ttsVoice);
+        opener.push(opening);
+        await opener.finish();
       }
       if (pausedRef.current) {
         setPhase('idle');
@@ -503,6 +508,7 @@ export default function ConversationScreen({
 
   const interruptAndListen = () => {
     if (pausedRef.current) return;
+    unlockAudio();
     stopSpeaking('bargein');
     startMicRef.current();
   };
@@ -522,6 +528,7 @@ export default function ConversationScreen({
   };
 
   const toggleSpeakMode = () => {
+    unlockAudio();
     if (speakMode) {
       // Entering Browse Menu — pause the whole voice experience. pause() stops
       // any MenuVoice audio and the mic immediately; the conversation/session
@@ -713,6 +720,9 @@ export default function ConversationScreen({
         ref={actionButtonRef}
         className="btn btn-primary"
         onClick={() => {
+          // Real user gesture: unlock audio playback so replies after the mic's
+          // silence auto-submit (which has no gesture) can still be spoken.
+          unlockAudio();
           if (actionConfig.unavailable) return;
           actionConfig.onClick();
         }}

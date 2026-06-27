@@ -13,7 +13,11 @@ const DIRECT_KEY = import.meta.env.VITE_OPENAI_API_KEY ?? '';
 const AUDIO_PROVIDER = import.meta.env.VITE_AUDIO_PROVIDER ?? 'openai';
 const VISION_MODEL = 'gpt-5.4-mini';
 const CHAT_MODEL = 'gpt-5.4-mini';
-const TTS_MODEL = 'tts-1-hd';
+// Latency-optimized TTS by default. `tts-1` starts generating audio markedly
+// faster than `tts-1-hd` (which is tuned for quality, not speed) — the right
+// trade for a live, back-and-forth voice conversation. Override with
+// VITE_TTS_MODEL=tts-1-hd if a warmer voice matters more than responsiveness.
+const TTS_MODEL = import.meta.env.VITE_TTS_MODEL ?? 'tts-1';
 const TTS_VOICE_DEFAULT = 'shimmer';
 
 // True when the direct browser→OpenAI path is available (local dev only).
@@ -363,7 +367,7 @@ export async function parseMenuFromUrl(url: string): Promise<ParsedMenu> {
 
 /** Restaurant NAME (+ city) -> structured menu, via server-side web search.
  * Throws a friendly Error when the menu isn't online. */
-export async function findMenuByName(query: string): Promise<{ menu: ParsedMenu; restaurantName: string | null; sourceUrl?: string }> {
+export async function findMenuByName(query: string): Promise<{ menu: ParsedMenu; restaurantName: string | null; address?: string | null; sourceUrl?: string }> {
   const t0 = Date.now();
   const res = await fetch('/api/find-menu', {
     method: 'POST',
@@ -373,6 +377,7 @@ export async function findMenuByName(query: string): Promise<{ menu: ParsedMenu;
   const data = (await res.json().catch(() => ({}))) as {
     menu?: ParsedMenu;
     restaurantName?: string | null;
+    address?: string | null;
     via?: string;
     sourceUrl?: string;
     error?: string;
@@ -392,17 +397,32 @@ export async function findMenuByName(query: string): Promise<{ menu: ParsedMenu;
     content: { restaurantName: data.menu.restaurantName ?? data.restaurantName, itemCount },
     metadata: { query, via: data.via, sourceUrl: data.sourceUrl },
   });
-  return { menu: data.menu, restaurantName: data.restaurantName ?? data.menu.restaurantName ?? null, sourceUrl: data.sourceUrl };
+  return {
+    menu: data.menu,
+    restaurantName: data.restaurantName ?? data.menu.restaurantName ?? null,
+    address: data.address ?? null,
+    sourceUrl: data.sourceUrl,
+  };
 }
 
-/** Text -> mp3 Blob (OpenAI TTS). */
+/** Text -> mp3 Blob (OpenAI TTS).
+ * Retries once on failure: the first request after page load often hits a cold
+ * Vercel serverless function that can time out, and we'd rather take a second
+ * attempt at the good voice than drop the opening line onto the robotic browser
+ * fallback. */
 export async function synthesizeSpeech(text: string, voice?: string): Promise<Blob> {
-  return audioSpeech({
+  const body = {
     model: TTS_MODEL,
     voice: voice || TTS_VOICE_DEFAULT,
     input: text,
     response_format: 'mp3',
-  });
+  };
+  try {
+    return await audioSpeech(body);
+  } catch (e) {
+    track('speech', 'tts_retry', { metadata: { reason: e instanceof Error ? e.message : String(e) } });
+    return audioSpeech(body);
+  }
 }
 
 async function parseApiError(res: Response): Promise<string> {

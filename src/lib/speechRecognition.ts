@@ -57,6 +57,9 @@ export class SpeechManager {
   private lastTranscript = '';
   private restartTimeout: ReturnType<typeof setTimeout> | null = null;
   private silenceTimer: ReturnType<typeof setTimeout> | null = null;
+  // Wait this long after the guest stops talking before submitting their turn.
+  // Kept generous on purpose: cutting a blind guest off mid-thought is far worse
+  // than a slightly late submit, so we tolerate natural pauses.
   private static readonly SILENCE_MS = 2000;
 
   constructor(
