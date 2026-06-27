@@ -11,6 +11,7 @@ import { earconStart, earconStop } from '../lib/earcon';
 import { startRecording, stopRecording, requestMicPermission, getActiveStream } from '../lib/recorder';
 import { transcribeAudio } from '../lib/openai';
 import { watchForSilence } from '../lib/vad';
+import { unlockAudio } from '../lib/audioUnlock';
 import { restoreFromCloud } from '../lib/storage';
 import { track } from '../lib/telemetry';
 
@@ -85,6 +86,9 @@ export default function LoginScreen() {
 
   const toggleMic = async () => {
     if (rec !== 'idle') return;
+    // Unlock audio while we're still inside the user gesture — ensures the
+    // shared AudioContext is running before watchForSilence uses it for VAD.
+    unlockAudio();
     const ok = await requestMicPermission();
     if (!ok) {
       announce('I could not access the microphone. Please type your email address.');
