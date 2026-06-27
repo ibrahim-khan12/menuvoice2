@@ -3,6 +3,7 @@
 
 import { synthesizeSpeech, hasApiKey } from './openai';
 import { track } from './telemetry';
+import { unlockAudio as unlockBaseAudio } from './audioUnlock';
 
 // Monotonic counter. stopSpeaking() increments it, invalidating every in-flight
 // playback path in one atomic move — structural guarantee against overlap.
@@ -42,6 +43,7 @@ function getAudioEl(): HTMLAudioElement {
 // after a silence auto-submit) is allowed. Idempotent, never interrupts active
 // speech, and harmless when the browser doesn't gate autoplay.
 export function unlockAudio() {
+  unlockBaseAudio();
   if (_speaking) return;
   if (!_audioUnlocked) {
     try {

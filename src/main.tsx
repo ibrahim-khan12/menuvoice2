@@ -3,7 +3,7 @@ import { createRoot } from 'react-dom/client';
 import { GoogleOAuthProvider } from '@react-oauth/google';
 import './index.css';
 import App from './App';
-import { unlockAudio } from './lib/audioUnlock';
+import { unlockAudio } from './lib/speech';
 import { initTelemetry } from './lib/telemetry';
 
 initTelemetry();
