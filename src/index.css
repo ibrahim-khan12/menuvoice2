@@ -826,7 +826,10 @@ body::before {
 }
 
 /* ── Keyframes ────────────────────────────────────── */
-@media (orientation: landscape) and (max-height: 620px) {
+/* Phone-in-landscape only: split the capture screen into two columns. Gated to
+   coarse/no-hover (touch) devices so a short desktop browser window never trips
+   it — on desktop the app must stay a centered phone-width column. */
+@media (orientation: landscape) and (max-height: 620px) and (pointer: coarse) and (hover: none) {
   #root {
     max-width: none;
   }
