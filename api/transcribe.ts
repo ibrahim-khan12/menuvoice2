@@ -34,10 +34,18 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   const key = process.env.OPENAI_API_KEY;
   if (!key) return res.status(500).json({ error: 'No API key configured on server.' });
 
+  // If the client sent a Cartesia model name (e.g. 'ink-whisper'), swap it for
+  // the correct OpenAI model so the fallback always works.
+  let openaiBody: Buffer | string = body;
+  let openaiContentType = contentType;
+  if (contentType.includes('multipart/form-data') && body.includes('ink-whisper')) {
+    openaiBody = body.toString().replace(/ink-whisper/g, 'whisper-1');
+  }
+
   const upstream = await fetch('https://api.openai.com/v1/audio/transcriptions', {
     method: 'POST',
-    headers: { Authorization: `Bearer ${key}`, 'Content-Type': contentType },
-    body: body as unknown as BodyInit,
+    headers: { Authorization: `Bearer ${key}`, 'Content-Type': openaiContentType },
+    body: openaiBody as unknown as BodyInit,
   });
   const data = await upstream.json();
   res.setHeader('X-Voice-Provider', 'openai');

@@ -134,7 +134,9 @@ export async function transcribeAudio(blob: Blob): Promise<string> {
   const form = new FormData();
   const ext = blob.type.includes('mp4') ? 'mp4' : blob.type.includes('webm') ? 'webm' : 'm4a';
   form.append('file', blob, `speech.${ext}`);
-  form.append('model', AUDIO_PROVIDER === 'cartesia' ? 'ink-whisper' : 'whisper-1');
+  // Always send whisper-1 — the server decides which STT provider to use via
+  // CARTESIA_STT_ENABLED. Sending 'ink-whisper' here breaks the OpenAI fallback.
+  form.append('model', 'whisper-1');
   form.append('language', 'en');
   const json = await audioTranscriptions(form);
   return (json.text ?? '').trim();
