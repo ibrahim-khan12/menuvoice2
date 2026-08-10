@@ -274,12 +274,10 @@
 
   /* ═══ Scroll-driven demo ════════════════════════════════════════════ */
   var MSGS = [
-    { r: 'a', plain: 'Good evening. The Greenhouse has eighteen dishes tonight, in four sections. Want the highlights?', html: null },
-    { r: 'u', plain: 'Something vegetarian, nothing pricey.', html: null },
-    { r: 'a', plain: 'Three under twelve pounds: squash risotto, halloumi flatbread, or the lentil dahl.', html: null },
-    { r: 'u', plain: 'Which would you order?', html: null },
-    { r: 'a', plain: 'The dahl \u2014 it\u2019s the kitchen\u2019s best-rated dish tonight.', html: 'The <b>dahl</b> \u2014 it\u2019s the kitchen\u2019s best-rated dish tonight.' },
-    { r: 'u', plain: 'Perfect. The dahl, please.', html: null },
+    { r: 'u', plain: 'Something vegetarian under twelve pounds.', html: null },
+    { r: 'a', plain: 'Try the lentil dahl or squash risotto.', html: null },
+    { r: 'u', plain: 'Which is most popular?', html: null },
+    { r: 'a', plain: 'The lentil dahl.', html: 'The <b>lentil dahl</b>.' },
   ];
 
   var PHASE_ORDER = ['scan', 'capture', 'reading', 'convo'];

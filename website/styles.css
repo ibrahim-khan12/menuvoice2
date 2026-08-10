@@ -357,11 +357,11 @@ h2.display { font-size: clamp(32px, 4.8vw, 60px); }
   animation: turn-in 280ms cubic-bezier(.2,.8,.3,1) both;
 }
 @keyframes turn-in { from{opacity:0;transform:translateY(8px) scale(0.97)} to{opacity:1;transform:none} }
-.cv-turn .who { font-family:var(--font-mono);font-size:8.5px;letter-spacing:0.1em;text-transform:uppercase;color:var(--text-muted);margin-bottom:3px; }
-.cv-turn .txt { font-size:12.5px;line-height:1.42;color:var(--text-primary); }
-.cv-turn.a { align-self:flex-start;background:var(--surface-high); }
-.cv-turn.u { align-self:flex-end;background:var(--surface-user); }
-.cv-turn .txt b { color:var(--accent); }
+.cv-turn .who { font-family:var(--font-mono);font-size:9px;letter-spacing:0.1em;text-transform:uppercase;color:#514d59;margin-bottom:4px; }
+.cv-turn .txt { font-size:13px;line-height:1.48;color:#17151c; }
+.cv-turn.a { align-self:flex-start;background:#e8e7ee;border:1px solid #cfccd8; }
+.cv-turn.u { align-self:flex-end;background:#f1e3d4;border:1px solid #dcc8b4; }
+.cv-turn .txt b { color:#5c3500; }
 /* Blinking cursor during typewriter */
 .cv-cursor { display:inline-block;width:1.5px;height:12px;background:var(--accent);margin-left:1px;animation:blink 0.65s step-end infinite;vertical-align:text-bottom; }
 @keyframes blink { 50%{opacity:0} }
