@@ -278,9 +278,17 @@ export default function CaptureScreen({
           return true;
         },
         onStruggle: () => {
-          setAutoMode(false);
-          track('capture', 'scanner_struggle', { metadata: { fallback: 'manual' } });
-          setCoachStatus('Auto capture is having trouble. Switched to manual. Tap "Take photo" when you are ready.');
+          // Auto capture deliberately stays ON. This fires only when there has
+          // been nothing readable in frame for a while — camera covered, or
+          // pointed away from the menu — and in that situation switching to
+          // manual just hands the problem to the person least able to see it.
+          // The scanner keeps running and will fire the moment a menu appears;
+          // this only adds the manual button as a second option.
+          track('capture', 'scanner_struggle', { metadata: { fallback: 'manual_offered' } });
+          setCoachStatus(
+            'I still cannot see a menu. Check the camera is not covered and is pointing at the page. ' +
+            'I am still watching and will take the photo myself as soon as I can see it — or tap "Take photo" whenever you like.'
+          );
         },
         onState: (state, detail) => {
           track('capture', 'guidance', { metadata: { state, ...(detail ? { detail } : {}) } });

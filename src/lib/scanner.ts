@@ -17,7 +17,14 @@
 //   - BEST-SHOT FALLBACK: if lighting + content are fine but perfect steadiness
 //     never arrives, capture anyway after ~5s. The vision model tolerates a
 //     slightly soft photo far better than a frustrated user tolerates waiting.
-//   - After 20s without any capture, onStruggle fires -> manual mode.
+//   - GUARANTEED CAPTURE: every quality gate relaxes as time passes (see the
+//     patience block below), so a problem the user cannot see and cannot fix
+//     — glare, a page bigger than the frame, a tilt they cannot feel — can no
+//     longer stop the shutter forever. Anything readable is photographed by
+//     ~7s and, at the outside, ~11s. The only frames still refused are ones
+//     with nothing on them and ones smeared mid-swing.
+//   - onStruggle now only OFFERS manual, when nothing readable has been in
+//     frame at all. It never switches auto capture off.
 //   - Every state change is reported via onState for telemetry.
 
 export type ScanState =
@@ -104,9 +111,42 @@ const ROTATE_SLACK_FRAC = 0.72;
 
 const ESCALATE_MS = 5500;     // second-stage message after this long in a state
 const BEST_SHOT_MS = 5000;    // content+light OK this long -> capture anyway
-const STRUGGLE_MS = 20000;    // no capture at all -> hand over to manual
+const STRUGGLE_MS = 20000;    // nothing to photograph at all -> also offer manual
 const HEARTBEAT_MS = 6000;    // reassure during long silence
 const AUTO_ZOOM_MS = 700;     // require persistent bad framing between zoom steps
+
+// ── Guaranteed capture ──────────────────────────────────────────────────────
+// Every quality gate below both blocks the shutter AND zeroes the best-shot
+// clock. One recurring problem is therefore enough to stop auto capture
+// forever: glare on a laminated menu, a page fractionally larger than the
+// frame, a few degrees of tilt. The countdown never starts, and after
+// STRUGGLE_MS the app switched itself off and asked the user to tap the
+// shutter themselves.
+//
+// That is exactly backwards for the person this feature exists for. A blind
+// user cannot see which gate is failing, cannot confirm they have fixed it,
+// and cannot judge the framing they are being asked to achieve. A gate they
+// have no way to clear is a dead end, not guidance.
+//
+// So patience widens with time. The opening seconds still hold out for a
+// genuinely good photo. After that the bar steps down until the only thing
+// still required is that there is something there to read. A slightly crooked,
+// slightly glared photo that extracts beats a perfect one that is never taken,
+// and lib/photoQuality.ts already inspects the result and offers a retake.
+// Timings are deliberately short. The opening seconds buy the user one round
+// of coaching and a chance to act on it; past that, more coaching mostly means
+// more time holding a phone over a table. An imperfect photo taken at 7s that
+// the quality check offers to retake beats a perfect one at 20s that never came.
+const RELAX_AT_MS = 3500;      // stop holding out for a flawless frame
+const GUARANTEE_AT_MS = 7000;  // take the best moment still available
+const FORCE_AT_MS = 11000;     // take it regardless of hand shake
+
+// Floors for the relaxed passes. Past these a photo really is unreadable, so
+// they are the one thing that never gives way.
+const LUM_FLOOR = 14;          // near-black
+const GLARE_CEILING = 0.34;    // a third of the frame blown out
+const SHARP_FLOOR = 22;        // beyond this nothing survives OCR
+const FORCE_MOTION_MAX = 26;   // still refuse a frame taken mid-swing
 
 const COUNTDOWN: Record<number, string> = {
   1: 'Hold still. Three.',
@@ -309,6 +349,8 @@ export class MenuScanner {
   private struggled = false;
   private steady = 0;
   private goodSince = 0;     // when lighting+content first became continuously OK
+  private sawContentAt = 0;  // last time there was anything readable in frame
+  private relaxAnnounced = false; // told the user once that we'll take what we can get
   private state: ScanState = 'searching';
   private coachStage = 0;
   private stateAt = 0;
@@ -339,6 +381,8 @@ export class MenuScanner {
     this.stateAt = Date.now();
     this.lastCoachAt = Date.now();
     this.armedAt = Date.now();
+    this.sawContentAt = 0;
+    this.relaxAnnounced = false;
     this.lastAutoZoomAt = 0;
     this.announcedAutoZoom = 0;
     this.rotateHintAt = 0;
@@ -422,8 +466,10 @@ export class MenuScanner {
       this.rotateHintDirection = null;
       // Turning the phone is progress, usually because we just asked for it —
       // so restart the give-up clock rather than punishing the user for the
-      // seconds they spent framing the other way round.
+      // seconds they spent framing the other way round. Patience restarts with
+      // it, which is why the relax notice re-arms too.
       this.armedAt = Date.now();
+      this.relaxAnnounced = false;
     }
 
     if (this.analysisZoom === 1) {
@@ -471,11 +517,20 @@ export class MenuScanner {
     this.emit(ROTATE_MSGS[direction]);
   }
 
-  private fireCapture(reason: 'steady' | 'best_shot') {
+  private fireCapture(reason: 'steady' | 'best_shot' | 'forced') {
     this.steady = 0;
     this.goodSince = 0;
     this.cb?.onState?.('steadying', `capture_${reason}`);
-    this.emit(reason === 'steady' ? 'Capturing now.' : 'Good enough. Taking the photo now.');
+    // 'forced' is honest about what happened: we ran out of patience rather
+    // than reaching a good frame, so the user should expect to check it. The
+    // post-capture quality check will name anything actually wrong with it.
+    this.emit(
+      reason === 'steady'
+        ? 'Capturing now.'
+        : reason === 'best_shot'
+          ? 'Good enough. Taking the photo now.'
+          : 'Taking the photo now with what I can see. I will tell you if it needs another try.'
+    );
     this.cb?.onProgress?.('steadying', STEADY_TICKS, STEADY_TICKS);
     this.cb?.onCapture();
   }
@@ -495,6 +550,39 @@ export class MenuScanner {
     return 'adjusted';
   }
 
+  /**
+   * How long we have been trying to photograph THIS page, expressed as how
+   * fussy we are still entitled to be.
+   *   0 — hold out for a good photo
+   *   1 — accept an imperfect one, and stop blocking on problems we have no
+   *       remedy for (a framing gate is only worth enforcing while zoom can
+   *       still act on it)
+   *   2 — take the shot; something readable beats nothing
+   * Resets per page, because armedAt is reset every time the scanner re-arms.
+   */
+  private patience(): 0 | 1 | 2 {
+    const waited = Date.now() - this.armedAt;
+    if (waited < RELAX_AT_MS) return 0;
+    if (waited < GUARANTEE_AT_MS) return 1;
+    return 2;
+  }
+
+  /** True once we have waited long enough to accept a shaky frame. */
+  private mustFireNow(): boolean {
+    return Date.now() - this.armedAt > FORCE_AT_MS;
+  }
+
+  /**
+   * Say once, when the bar drops, that we are no longer holding out. Without
+   * this the coaching keeps naming a problem right up until the shutter fires
+   * anyway, which reads as the app ignoring its own instructions.
+   */
+  private announceRelaxOnce() {
+    if (this.relaxAnnounced) return;
+    this.relaxAnnounced = true;
+    this.emit('This is close enough to read. I will take the photo myself in a moment — keep the phone as still as you can.');
+  }
+
   private tick() {
     const m = this.analyze();
     if (!m || !this.cb) return;
@@ -504,6 +592,8 @@ export class MenuScanner {
       if (m.motion > REARM_MOTION) {
         this.armed = true;
         this.armedAt = Date.now();
+        this.sawContentAt = 0;
+        this.relaxAnnounced = false;
         this.struggled = false;
         this.setState('searching');
         this.coachStage = 0; // skip the long intro on re-arm
@@ -512,22 +602,39 @@ export class MenuScanner {
       return;
     }
 
-    // Only fall back to manual if the user is making NO progress. If they just
-    // got steady (goodSince set, or steady ticks accumulating), a capture is
-    // imminent — don't yank auto mode away right before it fires (REVIEW.md #9).
+    if (m.edgeDensity >= EDGE_MIN * 0.7) this.sawContentAt = Date.now();
+
+    // Offer manual as well ONLY when there is genuinely nothing to photograph
+    // — camera covered, pointed at a blank table, lens over a dark surface.
+    // Any frame with readable detail is now guaranteed to be captured by
+    // FORCE_AT_MS, so reaching this point with content in view would mean the
+    // guarantee failed. Note this no longer turns auto capture off: it adds a
+    // manual option, and the scanner keeps trying underneath.
+    const nothingToSee = !this.sawContentAt || Date.now() - this.sawContentAt > 4000;
     if (
       !this.struggled &&
+      nothingToSee &&
       this.steady === 0 &&
-      !this.goodSince &&
       Date.now() - this.armedAt > STRUGGLE_MS
     ) {
       this.struggled = true;
       this.cb.onStruggle?.();
-      return;
+      // Deliberately no return — keep scanning, so auto capture still fires
+      // the moment a menu does come into view.
     }
 
+    const patience = this.patience();
+    // Thresholds widen as patience runs out. Only the floors survive to the
+    // last stage — past those a photo genuinely cannot be read.
+    const darkLimit = patience === 0 ? LUM_DARK : patience === 1 ? LUM_DARK * 0.72 : LUM_FLOOR;
+    const glareLimit = patience === 0 ? GLARE_FRAC : patience === 1 ? 0.2 : GLARE_CEILING;
+    const skewLimit = patience === 0 ? SKEW_WARN_DEG : patience === 1 ? SKEW_WARN_DEG * 1.7 : Infinity;
+    const edgeLimit = patience === 2 ? EDGE_MIN * 0.7 : EDGE_MIN;
+    const sharpLimit = patience === 0 ? SHARP_MIN : patience === 1 ? SHARP_MIN * 0.6 : SHARP_FLOOR;
+    if (patience > 0) this.announceRelaxOnce();
+
     // Priority: dark -> glare -> content present -> blur -> steady.
-    if (m.luminance < LUM_DARK) {
+    if (m.luminance < darkLimit) {
       this.steady = 0;
       this.goodSince = 0;
       this.setState('dark', `lum=${m.luminance.toFixed(0)}`);
@@ -536,7 +643,7 @@ export class MenuScanner {
       return;
     }
 
-    if (m.glareFrac > GLARE_FRAC) {
+    if (m.glareFrac > glareLimit) {
       this.steady = 0;
       this.goodSince = 0;
       this.setState('glare', `glare=${(m.glareFrac * 100).toFixed(0)}%`);
@@ -545,7 +652,7 @@ export class MenuScanner {
       return;
     }
 
-    if (m.edgeDensity < EDGE_MIN) {
+    if (m.edgeDensity < edgeLimit) {
       this.steady = 0;
       this.goodSince = 0;
       // Directional hint: where is the little detail we DO see?
@@ -572,35 +679,49 @@ export class MenuScanner {
     // Advisory: never returns, never delays a capture.
     this.maybeSuggestRotation(m);
 
-    // Framing: is the whole page in frame, and is it held level? These block
-    // capture the same way dark/glare/searching do — a crooked or badly
-    // cropped photo is far more likely to fail menu extraction than a
-    // slightly soft one, so there is no best-shot bypass for these states.
+    // Framing: is the whole page in frame, and is it held level?
+    //
+    // A framing gate is only worth enforcing while something can still act on
+    // it. Once zoom is at its limit (or the camera has no usable zoom at all)
+    // there is nothing left to try, and holding the shutter shut just to
+    // repeat advice the user has already followed is how auto capture used to
+    // stall out on any menu bigger than the frame. So these now block only
+    // while a zoom step is actually available, and never once patience runs
+    // out. Cropped edges cost some items; never taking the photo costs all of
+    // them.
     if (m.touchesBorder) {
-      this.steady = 0;
-      this.goodSince = 0;
-      this.setState('tooClose', `bbox=${(m.bboxWidthFrac * 100).toFixed(0)}x${(m.bboxHeightFrac * 100).toFixed(0)}%`);
       const zoomResult = this.tryAutoZoom(-1);
-      if (zoomResult === 'unavailable') {
+      const canStillFix = zoomResult !== 'unavailable' && patience < 2;
+      if (canStillFix) {
+        this.steady = 0;
+        this.goodSince = 0;
+        this.setState('tooClose', `bbox=${(m.bboxWidthFrac * 100).toFixed(0)}x${(m.bboxHeightFrac * 100).toFixed(0)}%`);
+        this.cb.onProgress?.('tooClose', 0, STEADY_TICKS);
+        return;
+      }
+      if (patience === 0) {
+        // Still early: say it once, but let the shot through rather than wait
+        // on a correction the camera cannot make.
         this.coachFor('tooClose');
       }
-      this.cb.onProgress?.('tooClose', 0, STEADY_TICKS);
-      return;
     }
 
     if (m.bboxWidthFrac < TOO_FAR_BBOX && m.bboxHeightFrac < TOO_FAR_BBOX) {
-      this.steady = 0;
-      this.goodSince = 0;
-      this.setState('tooFar', `bbox=${(m.bboxWidthFrac * 100).toFixed(0)}x${(m.bboxHeightFrac * 100).toFixed(0)}%`);
       const zoomResult = this.tryAutoZoom(1);
-      if (zoomResult === 'unavailable') {
+      const canStillFix = zoomResult !== 'unavailable' && patience < 2;
+      if (canStillFix) {
+        this.steady = 0;
+        this.goodSince = 0;
+        this.setState('tooFar', `bbox=${(m.bboxWidthFrac * 100).toFixed(0)}x${(m.bboxHeightFrac * 100).toFixed(0)}%`);
+        this.cb.onProgress?.('tooFar', 0, STEADY_TICKS);
+        return;
+      }
+      if (patience === 0) {
         this.coachFor('tooFar');
       }
-      this.cb.onProgress?.('tooFar', 0, STEADY_TICKS);
-      return;
     }
 
-    if (m.skewDeg > SKEW_WARN_DEG) {
+    if (m.skewDeg > skewLimit) {
       this.steady = 0;
       this.goodSince = 0;
       this.setState('skewed', `skew=${m.skewDeg.toFixed(0)}deg`);
@@ -614,7 +735,15 @@ export class MenuScanner {
     if (!this.goodSince) this.goodSince = Date.now();
     const bestShotDue = Date.now() - this.goodSince > BEST_SHOT_MS;
 
-    if (m.motion !== Infinity && m.motion <= MOTION_STEADY && m.sharpness < SHARP_MIN) {
+    // Last resort. We have waited long enough that no further coaching is
+    // going to help; the only thing still worth insisting on is that the frame
+    // was not caught mid-swing, because that blurs beyond any hope of reading.
+    if (this.mustFireNow() && m.motion !== Infinity && m.motion < FORCE_MOTION_MAX) {
+      this.fireCapture('forced');
+      return;
+    }
+
+    if (m.motion !== Infinity && m.motion <= MOTION_STEADY && m.sharpness < sharpLimit) {
       // Blurry while steady = focus/height problem, not hand shake.
       this.steady = 0;
       if (bestShotDue) { this.fireCapture('best_shot'); return; }
@@ -624,7 +753,10 @@ export class MenuScanner {
       return;
     }
 
-    if (m.motion === Infinity || m.motion > MOTION_STEADY) {
+    // How still is still enough. Once patience is gone, "as steady as this
+    // person is going to manage" is the honest bar.
+    const steadyLimit = patience === 2 ? MOTION_STEADY * 2.2 : MOTION_STEADY;
+    if (m.motion === Infinity || m.motion > steadyLimit) {
       this.steady = 0;
       if (bestShotDue && m.motion < REARM_MOTION) { this.fireCapture('best_shot'); return; }
       this.setState('moving', `motion=${m.motion === Infinity ? 'inf' : m.motion.toFixed(1)}`);
@@ -633,15 +765,18 @@ export class MenuScanner {
       return;
     }
 
-    // Steady and sharp: countdown to capture.
+    // Steady and sharp: countdown to capture. The countdown shortens as
+    // patience runs out — three seconds of "hold still" is reassurance early
+    // on and an obstacle late.
+    const ticksNeeded = patience === 2 ? 2 : STEADY_TICKS;
     this.setState('steadying');
     this.steady++;
-    if (this.steady >= STEADY_TICKS) {
+    if (this.steady >= ticksNeeded) {
       this.fireCapture('steady');
     } else {
       const msg = COUNTDOWN[this.steady];
       if (msg) this.emit(msg);
-      this.cb.onProgress?.('steadying', this.steady, STEADY_TICKS);
+      this.cb.onProgress?.('steadying', this.steady, ticksNeeded);
     }
   }
 }
