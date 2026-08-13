@@ -32,12 +32,12 @@ const MENU_OPEN_MODES: { value: MenuOpenMode; label: string; hint: string }[] = 
   {
     value: 'conversation',
     label: 'Talk with me',
-    hint: 'Meet My Menu AI reads the menu aloud and listens for your questions.',
+    hint: 'I read the menu aloud and listen for your questions.',
   },
   {
     value: 'browse',
     label: 'Stay silent',
-    hint: 'Menus open silent so your screen reader can read them without the app talking. You can still start a conversation any time.',
+    hint: 'Menus open silent so your screen reader can read. You can still talk any time.',
   },
 ];
 
@@ -237,7 +237,7 @@ export default function SettingsScreen({ goBack, navigate }: ScreenProps) {
         />
         {currentMenuOpenMode === 'browse' && (
           <p className="body" style={{ margin: '4px 0 0', fontSize: 'calc(14px * var(--text-scale))' }}>
-            Only applies once you start a conversation, since menus open silently.
+            Used once you start talking, since menus open silent.
           </p>
         )}
       </div>

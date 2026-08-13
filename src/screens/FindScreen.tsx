@@ -220,7 +220,7 @@ export default function FindScreen({ navigate, goBack }: ScreenProps) {
         return;
       }
       const fallback = isUrl
-        ? "I couldn't read the menu from that link. Try a different link, or type the restaurant's name and city."
+        ? "I couldn't read that link. Try another link, or type the restaurant name and city."
         : "I couldn't find that restaurant's menu online. Try adding the city and state to the name.";
       const message = friendlyError(e, fallback);
       setFailure({ message, wasUrl: isUrl });

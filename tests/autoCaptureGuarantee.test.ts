@@ -119,7 +119,7 @@ const fakeCtx = {
   createElement: () => ({ width: 0, height: 0, getContext: () => fakeCtx }),
 };
 
-const { MenuScanner } = await import('../src/lib/scanner.ts');
+const { MenuScanner, RELAX_NOTICE } = await import('../src/lib/scanner.ts');
 
 interface Outcome {
   captured: boolean;
@@ -282,7 +282,7 @@ test('auto capture is never switched off while a menu is in view', () => {
 test('the user is told the bar has dropped, rather than being coached at until the shutter surprises them', () => {
   const r = assertCaptures('relax notice', { tilt: 30 });
   assert.ok(
-    r.coach.some((c) => c.includes('close enough to read')),
+    r.coach.includes(RELAX_NOTICE),
     `expected a heads-up that we will take it anyway; got:\n  ${r.coach.join('\n  ')}`
   );
 });

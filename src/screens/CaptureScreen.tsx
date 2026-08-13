@@ -156,7 +156,7 @@ export default function CaptureScreen({
         }
       } catch {
         const msg =
-          'Camera unavailable. On iPhone, open this site over HTTPS and allow camera access. You can still upload photos using the Upload from Library button.';
+          'No camera. On iPhone, allow camera access for this site. You can also use Upload photos.';
         setCamError(msg);
         track('capture', 'camera_start', { outcome: 'failure', metadata: { error: msg } });
         track('error', 'camera', { metadata: { error: msg } });
@@ -299,8 +299,8 @@ export default function CaptureScreen({
           // this only adds the manual button as a second option.
           track('capture', 'scanner_struggle', { metadata: { fallback: 'manual_offered' } });
           setCoachStatus(
-            'I still cannot see a menu. Check the camera is not covered and is pointing at the page. ' +
-            'I am still watching and will take the photo myself as soon as I can see it — or tap "Take photo" whenever you like.'
+            'I still cannot see a menu. Check nothing is covering the camera. ' +
+            'I am still looking and will take the photo when I see it. You can also tap Take photo.'
           );
           sayGuidance('I cannot see a menu yet. Point the camera at the page. I am still watching.');
         },
@@ -341,7 +341,7 @@ export default function CaptureScreen({
       },
     });
     if (!quality.ok) {
-      const msg = `Photo ${index + 1}. ${quality.issues.map((i) => i.message).join(' ')} Consider retaking it, or tap Read menu to continue.`;
+      const msg = `Photo ${index + 1}. ${quality.issues.map((i) => i.message).join(' ')} Retake it, or tap Read menu to go on.`;
       setStatus(msg);
       sayGuidance(msg);
     }
@@ -359,8 +359,8 @@ export default function CaptureScreen({
       const next = [...prev, { id, imageBase64: b64, issues: [], checkingQuality: true }];
       const count = next.length;
       const msg = viaAuto
-        ? `Got it, photo ${count}. Checking quality. Line up the next page, or tap Read menu.`
-        : `Photo ${count} captured. Checking quality. Take another, or tap Read menu.`;
+        ? `Got photo ${count}. Checking it. Next page, or tap Read menu.`
+        : `Got photo ${count}. Checking it. Take another, or tap Read menu.`;
       setStatus(msg);
       sayGuidance(msg);
       track('capture', 'photo_added', {
@@ -586,7 +586,7 @@ export default function CaptureScreen({
   };
 
   return (
-    <Screen label="Hold your phone flat over the menu. I'll tell you how to line it up.">
+    <Screen label="Hold the phone flat over the menu. I will guide you.">
       <div className="row" style={{ alignItems: 'center', justifyContent: 'space-between' }}>
         <Title>Capture menu</Title>
         <div

@@ -69,8 +69,10 @@ function run(videoWidth: number, videoHeight: number, ticks = 12): RunResult {
   return { captures, coach, buffer: lastBuffer };
 }
 
-const isRotationAdvice = (msg: string) =>
-  msg.includes('Turning the phone sideways') || msg.includes('Holding the phone upright');
+// Match against the real messages rather than copies of them, so rewording the
+// coaching cannot silently stop these tests from checking anything.
+const { ROTATE_MSGS } = await import('../src/lib/scanner.ts');
+const isRotationAdvice = (msg: string) => Object.values(ROTATE_MSGS).includes(msg);
 
 test('the analysis buffer follows the phone: tall for portrait, wide for landscape', () => {
   const portrait = run(1080, 1920, 2);
@@ -111,7 +113,7 @@ test('a tall menu framed by a sideways phone auto-captures and advises standing 
   const r = run(1920, 1080);
   assert.ok(r.captures > 0, `auto-capture never fired. Coaching was: ${r.coach.join(' | ')}`);
   assert.ok(
-    r.coach.some((m) => m.includes('Holding the phone upright')),
+    r.coach.includes(ROTATE_MSGS.toPortrait),
     `expected advice to stand the phone up; got: ${r.coach.join(' | ')}`
   );
 });

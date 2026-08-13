@@ -31,14 +31,14 @@ export function PauseProvider({ children }: { children: React.ReactNode }) {
     if (profile.menuOpenMode === 'browse') setPaused(true);
   }, [loaded, profile.menuOpenMode]);
 
-  const pause = useCallback((message = 'Voice paused. Meet My Menu AI stopped speaking and the microphone is off. Your conversation is saved.') => {
+  const pause = useCallback((message = 'Voice paused. I stopped talking and the mic is off. Your chat is saved.') => {
     stopSpeaking();
     stopListeningRef.current?.();
     setPaused(true);
     setStatus(message);
   }, []);
 
-  const resume = useCallback((message = 'Voice resumed. The microphone is on and Meet My Menu AI can speak again.') => {
+  const resume = useCallback((message = 'Voice back on. The mic is on and I can talk again.') => {
     setPaused(false);
     setStatus(message);
   }, []);
