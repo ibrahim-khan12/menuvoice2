@@ -203,6 +203,79 @@ const ALLERGEN_GROUPS: AllergenGroup[] = [
       'horchata', 'pumpkin spice', 'speculoos', 'cinnamon roll', 'chai',
     ],
   },
+  {
+    key: 'beef',
+    label: 'beef',
+    profileTerms: ['beef', 'steak', 'steaks', 'veal', 'cow'],
+    personalOnly: true,
+    keywords: [
+      'beef', 'steak', 'steaks', 'sirloin', 'ribeye', 'rib eye', 'filet mignon',
+      'tenderloin', 'porterhouse', 't bone', 'new york strip', 'strip steak',
+      'brisket', 'short rib', 'short ribs', 'prime rib', 'veal', 'burger',
+      'burgers', 'hamburger', 'meatball', 'meatballs', 'beef broth', 'beef stock',
+    ],
+  },
+  {
+    key: 'pork',
+    label: 'pork',
+    profileTerms: ['pork', 'bacon', 'ham', 'prosciutto', 'sausage'],
+    personalOnly: true,
+    keywords: [
+      'pork', 'bacon', 'ham', 'prosciutto', 'pancetta', 'salami', 'pepperoni',
+      'chorizo', 'sausage', 'pulled pork', 'pork belly', 'lard', 'pork broth',
+    ],
+  },
+  {
+    key: 'lamb',
+    label: 'lamb',
+    profileTerms: ['lamb', 'mutton'],
+    personalOnly: true,
+    keywords: ['lamb', 'mutton', 'lamb chop', 'lamb shank', 'lamb broth'],
+  },
+  {
+    key: 'poultry',
+    label: 'poultry',
+    profileTerms: ['poultry', 'chicken', 'turkey', 'duck', 'goose'],
+    personalOnly: true,
+    keywords: [
+      'poultry', 'chicken', 'turkey', 'duck', 'goose', 'hen', 'wings',
+      'chicken broth', 'chicken stock', 'turkey bacon',
+    ],
+  },
+  {
+    key: 'vegetarian',
+    label: 'vegetarian restriction',
+    profileTerms: ['vegetarian', 'vegetarian diet', 'no meat'],
+    personalOnly: true,
+    keywords: [
+      // Vegetarian dishes can still contain dairy or eggs, so only animal flesh
+      // and animal-derived ingredients that are clearly incompatible are used.
+      'beef', 'steak', 'sirloin', 'ribeye', 'filet mignon', 'brisket', 'short rib',
+      'veal', 'burger', 'hamburger', 'meatball', 'pork', 'bacon', 'ham',
+      'prosciutto', 'pancetta', 'salami', 'pepperoni', 'chorizo', 'sausage', 'lard',
+      'lamb', 'mutton', 'chicken', 'turkey', 'duck', 'goose', 'fish', 'salmon',
+      'tuna', 'cod', 'anchovy', 'shrimp', 'prawn', 'crab', 'lobster', 'clam',
+      'mussel', 'scallop', 'oyster', 'squid', 'calamari', 'gelatin',
+    ],
+  },
+  {
+    key: 'vegan',
+    label: 'vegan restriction',
+    profileTerms: ['vegan', 'vegan diet', 'plant based', 'plant-based'],
+    personalOnly: true,
+    keywords: [
+      // Vegan includes the clearly non-vegetarian terms plus common animal
+      // ingredients. This is a warning, not a certification of suitability.
+      'beef', 'steak', 'sirloin', 'ribeye', 'filet mignon', 'brisket', 'short rib',
+      'veal', 'burger', 'hamburger', 'meatball', 'pork', 'bacon', 'ham',
+      'prosciutto', 'pancetta', 'salami', 'pepperoni', 'chorizo', 'sausage', 'lard',
+      'lamb', 'mutton', 'chicken', 'turkey', 'duck', 'goose', 'fish', 'salmon',
+      'tuna', 'cod', 'anchovy', 'shrimp', 'prawn', 'crab', 'lobster', 'clam',
+      'mussel', 'scallop', 'oyster', 'squid', 'calamari', 'gelatin', 'milk',
+      'cream', 'creamy', 'butter', 'cheese', 'yogurt', 'ghee', 'whey', 'casein', 'egg',
+      'eggs', 'mayonnaise', 'mayo', 'aioli', 'honey', 'beeswax',
+    ],
+  },
 ];
 
 function hasWord(haystack: string, needle: string): boolean {
@@ -266,6 +339,21 @@ function groupInProfile(group: AllergenGroup, profileAllergies: string[]): boole
   );
 }
 
+// Guests can need the app to watch for a food that is not in our curated map.
+// Preserve that exact, user-approved term and compare it as a whole phrase.
+// We deliberately do not guess related foods for these custom entries: an exact
+// alert is useful, while a made-up relationship could be dangerous.
+function customProfileFindings(item: MenuItem, profileAllergies: string[]): AllergenFinding[] {
+  const text = itemText(item);
+  const customTerms = profileAllergies
+    .map((allergy) => allergy.trim().toLowerCase())
+    .filter((allergy) => allergy.length >= 2)
+    .filter((allergy) => !ALLERGEN_GROUPS.some((group) => groupInProfile(group, [allergy])));
+  return [...new Set(customTerms)]
+    .filter((term) => hasWord(text, term))
+    .map((label) => ({ label, confidence: 'inferred' as const }));
+}
+
 export interface ItemAllergenInfo {
   // True when the dish may contain an allergen the guest listed and needs an alert.
   blocked: boolean;
@@ -292,6 +380,10 @@ export function analyzeItemAllergens(item: MenuItem, profileAllergies: string[])
     if (groupInProfile(group, profileAllergies)) blockedBy.push(finding);
     else if (!group.personalOnly) otherAllergens.push(finding);
   }
+  // An unrecognized but user-approved entry (for example, "paper") is still
+  // watched exactly as entered. It cannot appear in otherAllergens because it
+  // only has meaning for the guest who listed it.
+  blockedBy.push(...customProfileFindings(item, profileAllergies));
   return { blocked: blockedBy.length > 0, blockedBy, otherAllergens };
 }
 

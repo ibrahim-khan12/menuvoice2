@@ -38,6 +38,10 @@ const CANONICAL_ALLERGENS = [
   'hazelnuts', 'milk', 'dairy', 'lactose', 'eggs', 'wheat', 'gluten', 'soy',
   'fish', 'shellfish', 'shrimp', 'crab', 'lobster', 'sesame', 'mustard',
   'celery', 'sulfites', 'coconut', 'corn', 'garlic', 'onion', 'cinnamon',
+  // Dietary restrictions and commonly-entered animal foods. These are kept in
+  // the same safety list as allergens because the menu must flag either before
+  // recommending a dish; the app never treats a match as restaurant-confirmed.
+  'vegetarian', 'vegan', 'beef', 'pork', 'lamb', 'poultry', 'chicken', 'turkey',
 ];
 
 // Common mishearings/variants that edit distance alone would miss or mis-route.
@@ -48,6 +52,10 @@ const ALLERGEN_ALIASES: Record<string, string> = {
   glutin: 'gluten', glutten: 'gluten', wheats: 'wheat', soya: 'soy', soybean: 'soy',
   soybeans: 'soy', sezame: 'sesame', sesami: 'sesame', lactos: 'lactose',
   dairyproducts: 'dairy', seafood: 'shellfish', sulphites: 'sulfites',
+  veggie: 'vegetarian', vegetarianism: 'vegetarian', plantbased: 'vegan',
+  plantbaseddiet: 'vegan', beefs: 'beef', steak: 'beef', steaks: 'beef',
+  veal: 'beef', porks: 'pork', bacon: 'pork', ham: 'pork',
+  chicken: 'poultry', chickens: 'poultry', turkey: 'poultry', turkeys: 'poultry',
 };
 
 function editDistance(a: string, b: string): number {

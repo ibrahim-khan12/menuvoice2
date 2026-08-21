@@ -149,3 +149,23 @@ test('explicit declaration still applies to the new groups', () => {
   const info = analyzeItemAllergens(item, ['cinnamon']);
   assert.ok(info.blockedBy.some((f) => f.label === 'cinnamon' && f.confidence === 'explicit'));
 });
+
+test('steak allergy is normalized to beef coverage and blocks steak or beef dishes', () => {
+  const steak = analyzeItemAllergens({ name: 'Steak and eggs' }, ['steak']);
+  assert.equal(steak.blocked, true);
+  assert.ok(steak.blockedBy.some((finding) => finding.label === 'beef'));
+  assert.equal(analyzeItemAllergens({ name: 'Braised beef short ribs' }, ['steak']).blocked, true);
+});
+
+test('vegetarian and vegan restrictions flag plainly incompatible dishes', () => {
+  assert.equal(analyzeItemAllergens({ name: 'Chicken parmesan' }, ['vegetarian']).blocked, true);
+  assert.equal(analyzeItemAllergens({ name: 'Bacon and eggs' }, ['vegan']).blocked, true);
+  assert.equal(analyzeItemAllergens({ name: 'Creamy mushroom pasta' }, ['vegan']).blocked, true);
+  assert.equal(analyzeItemAllergens({ name: 'Garden salad' }, ['vegetarian']).blocked, false);
+});
+
+test('a user-approved custom term is watched as an exact phrase without guessed relatives', () => {
+  assert.equal(analyzeItemAllergens({ name: 'Rice paper rolls' }, ['paper']).blocked, true);
+  assert.equal(analyzeItemAllergens({ name: 'Paperdelle pasta' }, ['paper']).blocked, false);
+  assert.equal(analyzeItemAllergens({ name: 'Steak and eggs' }, ['paper']).blocked, false);
+});
