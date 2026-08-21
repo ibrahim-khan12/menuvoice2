@@ -709,7 +709,7 @@ export default function ConversationScreen({
           }}
         >
           <p className="body" style={{ margin: 0, fontWeight: 600 }}>
-            This wasn't a complete menu.
+            Some menu sections may be missing.
           </p>
           <button
             className="btn btn-secondary"
@@ -838,9 +838,7 @@ export default function ConversationScreen({
           the ONE screen where Meet My Menu AI speaks, VoiceOver is optional in it,
           and the Pause Voice button is the global off switch. */}
       <p role="note" className="body" style={{ fontSize: 15, color: 'var(--text-secondary)', margin: 0 }}>
-        In Conversation Mode you can turn your screen reader off and talk naturally, if you
-        prefer. You do not have to. If voices talk over each other, tap Pause Voice at the top
-        to silence Meet My Menu AI. Tap it again to resume.
+        Talk naturally, or use your screen reader. Pause Voice & Mic stops both.
       </p>
 
       <SecondaryButton

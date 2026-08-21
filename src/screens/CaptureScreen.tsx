@@ -10,7 +10,7 @@ import { useEffect, useRef, useState } from 'react';
 import { Screen, Title, PrimaryButton, SecondaryButton } from '../components';
 import { ScreenProps, Route } from '../nav';
 import { ParsedMenu } from '../types';
-import { stopSpeaking } from '../lib/speech';
+import { speak, stopSpeaking } from '../lib/speech';
 import { usePause } from '../state/PauseContext';
 import {
   startCamera,
@@ -93,12 +93,22 @@ export default function CaptureScreen({
   const photosRef = useRef<CapturedPhoto[]>([]);
   const zoomRef = useRef(1);
   const zoomRangeRef = useRef<ZoomRange>({ min: 1, max: 3, step: 0.25, value: 1, native: false });
+  const lastSpokenGuidanceRef = useRef({ text: '', at: 0 });
 
   const [photos, setPhotosState] = useState<CapturedPhoto[]>([]);
   const [confirmAnalyzeWithIssues, setConfirmAnalyzeWithIssues] = useState(false);
   const [status, setStatus] = useState('');
   const [coachStatus, setCoachStatus] = useState('');
   const [camError, setCamError] = useState('');
+
+  const sayGuidance = (message: string) => {
+    if (paused || !message) return;
+    const last = lastSpokenGuidanceRef.current;
+    const now = Date.now();
+    if (last.text === message || now - last.at < 1800) return;
+    lastSpokenGuidanceRef.current = { text: message, at: now };
+    void speak(message);
+  };
   const [cameraReady, setCameraReady] = useState(false);
   const [analyzing, setAnalyzing] = useState(false);
   const [autoMode, setAutoMode] = useState(true);
@@ -140,6 +150,7 @@ export default function CaptureScreen({
           setZoom(initialZoom);
           setCameraReady(true);
           enableTorch(s);
+          sayGuidance('Camera ready. Point at the menu. I will take the photo.');
           track('capture', 'camera_start', { outcome: 'success' });
         }
       } catch {
@@ -239,6 +250,7 @@ export default function CaptureScreen({
       autoRef.current.start(videoRef.current, {
         onCoach: (msg) => {
           setCoachStatus(msg);
+          sayGuidance(msg);
         },
         onCapture: () => {
           const range = zoomRangeRef.current;
@@ -289,6 +301,7 @@ export default function CaptureScreen({
             'I still cannot see a menu. Check the camera is not covered and is pointing at the page. ' +
             'I am still watching and will take the photo myself as soon as I can see it — or tap "Take photo" whenever you like.'
           );
+          sayGuidance('I cannot see a menu yet. Point the camera at the page. I am still watching.');
         },
         onState: (state, detail) => {
           track('capture', 'guidance', { metadata: { state, ...(detail ? { detail } : {}) } });
@@ -329,6 +342,7 @@ export default function CaptureScreen({
     if (!quality.ok) {
       const msg = `Photo ${index + 1}. ${quality.issues.map((i) => i.message).join(' ')} Consider retaking it, or tap Read menu to continue.`;
       setStatus(msg);
+      sayGuidance(msg);
     }
   };
 
@@ -347,6 +361,7 @@ export default function CaptureScreen({
         ? `Got it, photo ${count}. Checking quality. Line up the next page, or tap Read menu.`
         : `Photo ${count} captured. Checking quality. Take another, or tap Read menu.`;
       setStatus(msg);
+      sayGuidance(msg);
       track('capture', 'photo_added', {
         metadata: {
           mode: viaAuto ? 'auto' : 'manual',

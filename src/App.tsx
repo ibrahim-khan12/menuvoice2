@@ -173,8 +173,8 @@ function Root() {
           aria-pressed={paused}
           aria-label={
             paused
-              ? 'Resume Voice. Turn the microphone and Meet My Menu AI speech back on.'
-              : 'Pause Voice. Stop Meet My Menu AI speech and turn off microphone listening.'
+              ? 'Resume voice and microphone.'
+              : 'Pause voice and microphone.'
           }
         >
           <span className="voice-toggle__glyph" aria-hidden="true">
@@ -189,7 +189,7 @@ function Root() {
               </svg>
             )}
           </span>
-          {paused ? 'Resume Voice' : 'Pause Voice'}
+          {paused ? 'Resume Voice & Mic' : 'Pause Voice & Mic'}
         </button>
       )}
       {current.name !== 'settings' && (

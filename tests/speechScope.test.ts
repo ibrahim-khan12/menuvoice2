@@ -15,7 +15,7 @@ import { readFileSync, readdirSync } from 'node:fs';
 import { join } from 'node:path';
 
 const SCREENS_DIR = join(import.meta.dirname, '..', 'src', 'screens');
-const ALLOWED_SCREEN = 'ConversationScreen.tsx';
+const ALLOWED_SCREENS = ['ConversationScreen.tsx', 'CaptureScreen.tsx'];
 
 // Functions that produce audible spoken content. Everything else exported by
 // lib/speech (stopSpeaking, isSpeaking, setSpeechRate, unlockAudio) is safe
@@ -43,19 +43,20 @@ function screenFiles(): string[] {
 
 test('every screen file exists where this guard expects it', () => {
   const files = screenFiles();
-  assert.ok(files.includes(ALLOWED_SCREEN), 'ConversationScreen.tsx should exist');
+  assert.ok(files.includes('ConversationScreen.tsx'), 'ConversationScreen.tsx should exist');
+  assert.ok(files.includes('CaptureScreen.tsx'), 'CaptureScreen.tsx should exist');
   assert.ok(files.length >= 9, 'sanity check: the screens directory should not be empty');
 });
 
-test('no screen other than Conversation imports a speech-producing function', () => {
+test('only Conversation and Capture import a speech-producing function', () => {
   const violations: string[] = [];
   for (const file of screenFiles()) {
-    if (file === ALLOWED_SCREEN) continue;
+    if (ALLOWED_SCREENS.includes(file)) continue;
     const source = readFileSync(join(SCREENS_DIR, file), 'utf8');
     const banned = importedSpeechNames(source).filter((n) => SPEECH_PRODUCING_EXPORTS.includes(n));
     if (banned.length) violations.push(`${file}: imports ${banned.join(', ')}`);
   }
-  assert.deepEqual(violations, [], 'app-generated speech must be confined to ConversationScreen');
+  assert.deepEqual(violations, [], 'app-generated speech must be confined to Conversation and Capture');
 });
 
 test('the guard actually detects a violation (regex sanity check)', () => {
@@ -65,7 +66,7 @@ test('the guard actually detects a violation (regex sanity check)', () => {
 });
 
 test('Conversation screen does use the speech-producing functions', () => {
-  const source = readFileSync(join(SCREENS_DIR, ALLOWED_SCREEN), 'utf8');
+  const source = readFileSync(join(SCREENS_DIR, 'ConversationScreen.tsx'), 'utf8');
   const names = importedSpeechNames(source);
   assert.ok(names.includes('speak'), 'sanity check: Conversation should import speak');
   assert.ok(names.includes('createStreamingSpeech'), 'sanity check: Conversation should import createStreamingSpeech');

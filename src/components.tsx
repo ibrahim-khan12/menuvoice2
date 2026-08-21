@@ -129,7 +129,7 @@ export function AllergenReviewPanel({
   return (
     <div className="card" role="group" aria-label="Check your allergy list before saving">
       <p className="body" style={{ fontWeight: 700, marginBottom: 12 }}>
-        Before I save your allergy list, please check this word:
+        Check this word:
       </p>
       <div className="allergen-question">
         <p className="body" style={{ marginBottom: 10 }} ref={promptRef} tabIndex={-1}>
@@ -141,8 +141,7 @@ export function AllergenReviewPanel({
             </>
           ) : (
             <>
-              I don't recognize <strong>{question.typed}</strong> as a food allergen. I can still
-              watch for that exact word on menus.
+              I don't recognize <strong>{question.typed}</strong>. I will still watch for it.
             </>
           )}
         </p>

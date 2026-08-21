@@ -12,11 +12,12 @@ import { cleanName, parseList, reviewAllergenInput, removeFromList } from '../ut
 import { configuredAppleShortcutUrl, isAppleMobileDevice } from '../lib/appleShortcut';
 import { track } from '../lib/telemetry';
 
-type Step = 'name' | 'allergyChoice' | 'allergies' | 'confirm' | 'shortcut';
+type Step = 'voiceover' | 'name' | 'allergyChoice' | 'allergies' | 'confirm' | 'shortcut';
 
 export default function OnboardingScreen() {
   const { update } = useProfile();
-  const [step, setStep] = useState<Step>('name');
+  const [step, setStep] = useState<Step>('voiceover');
+  const [usesVoiceOver, setUsesVoiceOver] = useState(false);
   const [name, setName] = useState('');
   const [allergiesText, setAllergiesText] = useState('');
   const shortcutUrl = configuredAppleShortcutUrl();
@@ -53,6 +54,7 @@ export default function OnboardingScreen() {
     await update({
       name: cleanName(name),
       allergies: acceptedRef.current,
+      usesVoiceOver,
       onboarded: true,
     });
   };
@@ -89,7 +91,14 @@ export default function OnboardingScreen() {
 
   return (
     <Screen className="onboarding-screen">
-      <Title>Meet My Menu AI</Title>
+      {step === 'voiceover' && (
+        <div className="col onboarding-step">
+          <h1 className="heading onboarding-first-heading" ref={stepHeadingRef} tabIndex={-1}>Do you use VoiceOver?</h1>
+          <Body>This helps set up menu scanning.</Body>
+          <PrimaryButton label="Yes" onClick={() => { setUsesVoiceOver(true); setStep('name'); }} />
+          <SecondaryButton label="No" onClick={() => { setUsesVoiceOver(false); setStep('name'); }} />
+        </div>
+      )}
 
       {step === 'name' && (
         <TypeStep
@@ -162,7 +171,6 @@ export default function OnboardingScreen() {
           <h2 className="heading" ref={stepHeadingRef} tabIndex={-1}>
             Checking your allergies
           </h2>
-          <Body>Allergies keep you safe, so I never change a word without asking.</Body>
           <AllergenReviewPanel
             questions={questions}
             onDone={(kept) => continueAfterAllergyReview([...acceptedRef.current, ...kept])}
