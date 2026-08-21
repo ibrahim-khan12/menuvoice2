@@ -14,6 +14,7 @@ export interface UserProfile {
   theme?: AppTheme; // color scheme (default 'dark': warm amber on near-black)
   textScale?: TextScale; // global text size (default 'large')
   speechRate?: number; // Conversation Mode speaking speed multiplier (default 1)
+  usesVoiceOver?: boolean; // stored onboarding preference
   tutorialSeen?: boolean; // first-run tutorial shown once, then never auto-shown
   // Which mode a menu opens in. 'conversation' = Meet My Menu AI speaks and
   // listens; 'browse' = silent, so a screen reader reads the menu without the
