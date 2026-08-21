@@ -3,7 +3,7 @@
 
 import React, { useLayoutEffect, useRef, useState } from 'react';
 
-export function Screen({ children, label }: { children: React.ReactNode; label?: string }) {
+export function Screen({ children, label, className }: { children: React.ReactNode; label?: string; className?: string }) {
   const ref = useRef<HTMLElement>(null);
   useLayoutEffect(() => {
     // Move focus before paint so screen readers do not first announce a stale
@@ -12,7 +12,7 @@ export function Screen({ children, label }: { children: React.ReactNode; label?:
     ref.current?.focus();
   }, []);
   return (
-    <main id="main-content" className="screen" tabIndex={-1} ref={ref} aria-label={label}>
+    <main id="main-content" className={`screen${className ? ` ${className}` : ''}`} tabIndex={-1} ref={ref} aria-label={label}>
       {children}
     </main>
   );

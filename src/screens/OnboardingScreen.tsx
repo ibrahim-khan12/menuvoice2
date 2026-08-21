@@ -12,7 +12,7 @@ import { cleanName, parseList, reviewAllergenInput, removeFromList } from '../ut
 import { configuredAppleShortcutUrl, isAppleMobileDevice } from '../lib/appleShortcut';
 import { track } from '../lib/telemetry';
 
-type Step = 'name' | 'allergies' | 'confirm' | 'shortcut';
+type Step = 'name' | 'allergyChoice' | 'allergies' | 'confirm' | 'shortcut';
 
 export default function OnboardingScreen() {
   const { update } = useProfile();
@@ -88,7 +88,7 @@ export default function OnboardingScreen() {
   };
 
   return (
-    <Screen>
+    <Screen className="onboarding-screen">
       <Title>Meet My Menu AI</Title>
 
       {step === 'name' && (
@@ -98,23 +98,33 @@ export default function OnboardingScreen() {
           placeholder="First name"
           value={name}
           onChange={setName}
-          onNext={() => setStep('allergies')}
+          onNext={() => setStep('allergyChoice')}
           nextLabel="Next"
           headingRef={stepHeadingRef}
         />
+      )}
+
+      {step === 'allergyChoice' && (
+        <div className="col onboarding-step">
+          <h2 className="heading" ref={stepHeadingRef} tabIndex={-1}>Do you have food allergies?</h2>
+          <Body>Choose one.</Body>
+          <PrimaryButton label="Yes" onClick={() => setStep('allergies')} />
+          <SecondaryButton label="No" onClick={() => continueAfterAllergyReview([])} />
+          <SecondaryButton label="Back" onClick={() => setStep('name')} />
+        </div>
       )}
 
       {step === 'allergies' && (
         <>
           <TypeStep
             question="Any food allergies?"
-            help="Type them, or type none."
+            help="Type your allergies below."
             placeholder="e.g. shellfish, peanuts"
             value={allergiesText}
             onChange={setAllergiesText}
             onNext={finishAllergyStep}
             nextLabel={shouldOfferShortcut ? 'Next' : 'Finish'}
-            onBack={() => setStep('name')}
+            onBack={() => setStep('allergyChoice')}
             headingRef={stepHeadingRef}
             inputRef={allergyInputRef}
           />
@@ -189,12 +199,12 @@ function TypeStep({
   inputRef?: RefObject<HTMLInputElement>;
 }) {
   return (
-    <div className="col">
+    <div className="col onboarding-step">
       <h2 className="heading" ref={headingRef} tabIndex={-1}>{question}</h2>
       <Body>{help}</Body>
 
       <input
-        className="input"
+        className="input onboarding-input"
         type="text"
         ref={inputRef}
         value={value}

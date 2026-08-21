@@ -20,30 +20,30 @@ interface Step {
 // Meet My Menu AI works" screen (STEPS below), reachable anytime from Settings.
 const FIRST_RUN_STEPS: Step[] = [
   {
-    title: 'Get the menu',
+    title: 'Open a menu',
     body: 'Scanning your own copy is usually the most accurate — you can also search online or open a saved menu.',
   },
   {
-    title: 'Talk or browse, your choice',
+    title: 'Ask a question',
     body: 'Talk with Meet My Menu AI by voice, or switch to Browse Menu to read silently with your screen reader.',
   },
   {
-    title: 'Allergy safety',
+    title: 'Check with staff',
     body: 'Add your allergies in Settings — risky dishes get a warning before anything else, and you should always confirm with staff.',
   },
 ];
 
 const STEPS: Step[] = [
   {
-    title: 'Get a menu',
+    title: 'Open a menu',
     body: 'Scanning your own copy is usually the most accurate. You can also search for one online or open a saved menu. Demo Menu is for practice.',
   },
   {
-    title: 'Talk with Meet My Menu AI',
+    title: 'Ask a question',
     body: 'When a menu opens, the mic is on. Ask anything, like "What is in the carbonara?" Tap the big button to talk.',
   },
   {
-    title: 'Browse quietly',
+    title: 'Check with staff',
     body: 'Browse Menu is silent. Read category by category with your screen reader.',
   },
   {
@@ -74,7 +74,12 @@ export default function TutorialScreen({
     }
   }, [firstRun]);
 
-  const steps = firstRun ? FIRST_RUN_STEPS : STEPS;
+  const steps = (firstRun ? FIRST_RUN_STEPS : STEPS).slice(0, 3);
+  const shortDirections = [
+    'Scan it, search for it, or open a saved menu.',
+    'Ask about dishes or allergies.',
+    'Always confirm ingredients.',
+  ];
 
   return (
     <Screen>
@@ -87,7 +92,7 @@ export default function TutorialScreen({
             <span className="tutorial-step__num" aria-hidden="true">{i + 1}</span>
             <div className="tutorial-step__body">
               <h2 className="tutorial-step__title">{step.title}</h2>
-              <p className="tutorial-step__text">{step.body}</p>
+              <p className="tutorial-step__text">{shortDirections[i]}</p>
             </div>
           </li>
         ))}

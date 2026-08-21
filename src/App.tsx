@@ -192,6 +192,19 @@ function Root() {
           {paused ? 'Resume Voice' : 'Pause Voice'}
         </button>
       )}
+      {current.name !== 'settings' && (
+        <button
+          className="app-settings-button"
+          onClick={() => navigate({ name: 'settings' })}
+          aria-label="Settings. Change text size, colors, allergies, and preferences."
+        >
+          <svg width="28" height="28" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+            <circle cx="12" cy="12" r="3" stroke="currentColor" strokeWidth="2" />
+            <path d="M12 2.5v2.2M12 19.3v2.2M21.5 12h-2.2M4.7 12H2.5M18.4 5.6l-1.6 1.6M7.2 16.8l-1.6 1.6M18.4 18.4l-1.6-1.6M7.2 7.2L5.6 5.6" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+          </svg>
+          <span>Settings</span>
+        </button>
+      )}
       {screen}
     </>
   );
@@ -296,7 +309,7 @@ function pushAppHistoryEntry(entry: AppHistoryEntry): void {
 
 function pageStatusFor(name: Route['name']): string {
   switch (name) {
-    case 'home': return 'Home screen. Choose read a menu, saved restaurants, demo menu, tutorial, or settings.';
+    case 'home': return 'Home screen. Choose Read a Menu, Saved Restaurants, or Demo Menu. Settings is available in the top right.';
     case 'getMenu': return 'Read a menu. Choose Scan a Menu or Find a Menu.';
     case 'capture': return 'Capture menu';
     case 'find': return 'Find menu screen. Enter a restaurant name and city, or paste a menu link.';

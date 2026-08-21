@@ -35,7 +35,7 @@
   --r-sm:         10px;
   --r-md:         14px;
   --r-lg:         22px;
-  --touch:        64px;
+  --touch:        76px;
 
   /* Elevation — depth without decoration */
   --shadow-sm:   0 1px 2px rgba(0, 0, 0, 0.45);
@@ -312,12 +312,12 @@ body::before {
   flex: 1;
   display: flex;
   flex-direction: column;
-  gap: 16px;
-  padding: 28px 20px;
+  gap: 20px;
+  padding: 32px 24px;
   /* Reserve room at the bottom so the fixed Pause Voice pill never overlaps
      content (it sits 14px from the bottom and is ~56px tall). */
   padding-bottom: calc(env(safe-area-inset-bottom) + 88px);
-  padding-top: max(28px, env(safe-area-inset-top));
+  padding-top: max(32px, env(safe-area-inset-top));
   animation: screen-in 300ms var(--ease-out-quint) both;
 }
 
@@ -541,7 +541,7 @@ body::before {
   font-family: inherit;
   font-size: calc(17px * var(--text-scale));
   font-weight: 400;
-  padding: 0 16px;
+  padding: 0 20px;
   transition: border-color 120ms ease;
 }
 
@@ -569,7 +569,83 @@ body::before {
 .col {
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: 16px;
+}
+
+.app-settings-button {
+  position: fixed;
+  z-index: var(--z-float);
+  top: max(12px, env(safe-area-inset-top));
+  right: max(12px, env(safe-area-inset-right), calc((100vw - 560px) / 2 + 12px));
+  min-height: 68px;
+  min-width: 68px;
+  padding: 10px 14px;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  border: 2px solid var(--border);
+  border-radius: var(--r-md);
+  background: var(--surface-high);
+  color: var(--text-primary);
+  font: inherit;
+  font-size: calc(16px * var(--text-scale));
+  font-weight: 750;
+  cursor: pointer;
+  box-shadow: var(--shadow-md), var(--edge-light);
+}
+
+.app-settings-button + .screen {
+  padding-top: max(104px, env(safe-area-inset-top));
+}
+
+.onboarding-screen {
+  justify-content: center;
+  gap: 28px;
+}
+
+.onboarding-step {
+  min-height: calc(100dvh - 150px);
+  justify-content: center;
+  gap: 28px;
+}
+
+.onboarding-screen > .title {
+  font-size: clamp(calc(48px * var(--text-scale)), 14vw, calc(64px * var(--text-scale)));
+}
+
+.onboarding-step .heading {
+  font-size: clamp(calc(32px * var(--text-scale)), 9vw, calc(42px * var(--text-scale)));
+  line-height: 1.12;
+  scroll-margin-top: 28px;
+}
+
+.onboarding-step .btn,
+.onboarding-input {
+  min-height: 92px;
+  font-size: calc(22px * var(--text-scale));
+}
+
+.onboarding-input {
+  padding-inline: 24px;
+}
+
+.settings-utility-link {
+  width: 100%;
+  min-height: 60px;
+  padding: 12px 4px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  border: 0;
+  border-top: 1px solid var(--border);
+  border-bottom: 1px solid var(--border);
+  background: transparent;
+  color: var(--accent);
+  font: inherit;
+  font-size: calc(18px * var(--text-scale));
+  font-weight: 750;
+  text-align: left;
+  cursor: pointer;
 }
 
 .spacer {

@@ -91,33 +91,6 @@ export default function HomeScreen({ navigate }: ScreenProps) {
         />
       </div>
 
-      <div className="spacer" />
-
-      <div className="col stagger">
-        <Tile
-          title="How it works"
-          sub="A quick tutorial for using Meet My Menu AI"
-          onClick={go({ name: 'tutorial' })}
-          icon={
-            <svg width="26" height="26" viewBox="0 0 24 24" {...stroke}>
-              <circle cx="12" cy="12" r="9" />
-              <path d="M9.2 9.3a2.8 2.8 0 015.4 1c0 1.9-2.6 2.3-2.6 3.9" />
-              <path d="M12 17.4h.01" strokeWidth="2.6" />
-            </svg>
-          }
-        />
-        <Tile
-          title="Settings"
-          sub="Text size, colors, allergies, and preferences"
-          onClick={go({ name: 'settings' })}
-          icon={
-            <svg width="26" height="26" viewBox="0 0 24 24" {...stroke}>
-              <circle cx="12" cy="12" r="3" />
-              <path d="M12 2.5v2.2M12 19.3v2.2M21.5 12h-2.2M4.7 12H2.5M18.4 5.6l-1.6 1.6M7.2 16.8l-1.6 1.6M18.4 18.4l-1.6-1.6M7.2 7.2L5.6 5.6" />
-            </svg>
-          }
-        />
-      </div>
     </Screen>
   );
 }

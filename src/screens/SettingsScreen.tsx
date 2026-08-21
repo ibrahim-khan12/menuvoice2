@@ -173,12 +173,6 @@ export default function SettingsScreen({ goBack, navigate }: ScreenProps) {
     <Screen>
       <Title>Settings</Title>
 
-      <SecondaryButton
-        label="How Meet My Menu AI works"
-        hint="Open the step by step tutorial"
-        onClick={() => navigate({ name: 'tutorial' })}
-      />
-
       <Heading>Accessibility</Heading>
 
       <div className="setting-block">
@@ -247,6 +241,15 @@ export default function SettingsScreen({ goBack, navigate }: ScreenProps) {
           </p>
         )}
       </div>
+
+      <button
+        className="settings-utility-link"
+        onClick={() => navigate({ name: 'tutorial' })}
+        aria-label="How Meet My Menu AI works. Open the short tutorial"
+      >
+        <span>How Meet My Menu AI works</span>
+        <span aria-hidden="true">›</span>
+      </button>
 
       <Heading>Your name</Heading>
       <input
