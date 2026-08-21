@@ -128,9 +128,6 @@ export function AllergenReviewPanel({
 
   return (
     <div className="card" role="group" aria-label="Check your allergy list before saving">
-      <p className="body" style={{ fontWeight: 700, marginBottom: 12 }}>
-        Check this word:
-      </p>
       <div className="allergen-question">
         <p className="body" style={{ marginBottom: 10 }} ref={promptRef} tabIndex={-1}>
           {questions.length > 1 && `Question ${questionIndex + 1} of ${questions.length}. `}
@@ -141,7 +138,7 @@ export function AllergenReviewPanel({
             </>
           ) : (
             <>
-              I don't recognize <strong>{question.typed}</strong>. I will still watch for it.
+              Watch for <strong>{question.typed}</strong>?
             </>
           )}
         </p>

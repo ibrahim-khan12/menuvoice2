@@ -169,7 +169,7 @@ export default function OnboardingScreen() {
       {step === 'confirm' && (
         <div className="col">
           <h2 className="heading" ref={stepHeadingRef} tabIndex={-1}>
-            Checking your allergies
+            Check this
           </h2>
           <AllergenReviewPanel
             questions={questions}
