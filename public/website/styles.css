@@ -86,24 +86,10 @@ main, header, footer { position: relative; z-index: 1; }
   text-transform: uppercase;
   color: var(--accent);
   font-weight: 500;
-  display: inline-flex;
-  align-items: center;
-  gap: 10px;
+  display: block;
   margin: 0;
 }
-.eyebrow::before {
-  content: '';
-  width: 7px; height: 7px;
-  border-radius: 50%;
-  background: var(--accent);
-  animation: live-dot 2.4s ease-out infinite;
-}
-@keyframes live-dot {
-  0%   { box-shadow: 0 0 0 0 var(--accent-glow); }
-  70%  { box-shadow: 0 0 0 9px transparent; }
-  100% { box-shadow: 0 0 0 0 transparent; }
-}
-@media (prefers-reduced-motion: reduce) { .eyebrow::before { animation: none; } }
+/* no marker on the eyebrow: the letterspaced label stands on its own */
 
 .display {
   font-family: var(--font-display);
@@ -537,6 +523,11 @@ h2.display { font-size: clamp(32px, 4.8vw, 60px); }
 .foot-grid .links a { color:var(--text-muted);text-decoration:none;font-size:14px; }
 .foot-grid .links a:hover { color:var(--text-secondary); }
 .foot-note { margin-top:22px;font-size:13px;color:var(--text-muted);max-width:60ch;line-height:1.5; }
+footer:not(.site-foot) { border-top:1px solid var(--border-soft);padding-block:44px; }
+.foot-row { display:flex;align-items:center;justify-content:space-between;gap:22px;flex-wrap:wrap; }
+.foot-links { display:flex;gap:22px;flex-wrap:wrap; }
+.foot-links a { color:var(--text-muted);text-decoration:none;font-size:14px; }
+.foot-links a:hover { color:var(--text-secondary); }
 
 /* ── Reveal ── */
 .reveal { opacity:0;transform:translateY(22px);transition:opacity 700ms ease,transform 700ms cubic-bezier(.2,.7,.3,1); }
