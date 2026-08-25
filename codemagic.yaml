@@ -18,25 +18,16 @@ workflows:
       - name: Build the web app
         script: npm run build
 
-      # ios/ isn't committed to the repo (it's Xcode/CocoaPods-generated and
-      # this team has no Mac to generate it locally), so every build creates
-      # it fresh and re-applies the plist edits below.
+      # ios/ isn't committed to the repo (it's Xcode-generated and this team
+      # has no Mac to generate it locally), so every build creates it fresh.
+      # Capacitor 8's default template uses Swift Package Manager, not
+      # CocoaPods (it writes ios/App/CapApp-SPM/Package.swift, no Podfile,
+      # no .xcworkspace) so there's nothing to `pod install` here.
       - name: Add and sync the iOS platform
         script: |
           set -e
           npx cap add ios
           npx cap sync ios
-          echo "--- ios/App contents ---"
-          ls -la ios/App
-
-      # cap sync normally runs `pod install` itself, but the generated
-      # App.xcworkspace only exists once CocoaPods has actually run, and
-      # that step has silently no-opped before, so run it explicitly too.
-      - name: Install CocoaPods dependencies
-        script: |
-          set -e
-          cd ios/App
-          pod install
 
       - name: Add required Info.plist entries
         script: |
@@ -55,7 +46,7 @@ workflows:
       - name: Build the .ipa
         script: |
           xcode-project build-ipa \
-            --workspace "ios/App/App.xcworkspace" \
+            --project "ios/App/App.xcodeproj" \
             --scheme "App"
 
     artifacts:
