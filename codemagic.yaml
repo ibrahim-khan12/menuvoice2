@@ -51,8 +51,10 @@ workflows:
       - name: Set the build number
         script: |
           set -e
+          BUILD_NUMBER=$(date -u +%Y%m%d%H%M)
+          echo "Using build number: $BUILD_NUMBER"
           cd ios/App
-          agvtool new-version -all "$CM_BUILD_NUMBER"
+          agvtool new-version -all "$BUILD_NUMBER"
 
       - name: Set up code signing
         script: |
