@@ -45,11 +45,16 @@ workflows:
         script: |
           xcode-project use-profiles
 
+      # ios/ is regenerated from scratch every build, so its bundle version
+      # always starts back at 1 — TestFlight rejects that as a duplicate of
+      # whatever was uploaded last time. Codemagic's auto-incrementing build
+      # number keeps every upload's version unique.
       - name: Build the .ipa
         script: |
           xcode-project build-ipa \
             --project "ios/App/App.xcodeproj" \
-            --scheme "App"
+            --scheme "App" \
+            --archive-xcargs "CURRENT_PROJECT_VERSION=$CM_BUILD_NUMBER"
 
     artifacts:
       - build/ios/ipa/*.ipa
