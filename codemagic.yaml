@@ -23,19 +23,24 @@ workflows:
       # it fresh and re-applies the plist edits below.
       - name: Add and sync the iOS platform
         script: |
+          set -e
           npx cap add ios
           npx cap sync ios
+          echo "--- ios/App contents ---"
+          ls -la ios/App
 
       # cap sync normally runs `pod install` itself, but the generated
       # App.xcworkspace only exists once CocoaPods has actually run, and
       # that step has silently no-opped before, so run it explicitly too.
       - name: Install CocoaPods dependencies
         script: |
+          set -e
           cd ios/App
           pod install
 
       - name: Add required Info.plist entries
         script: |
+          set -e
           PLIST="ios/App/App/Info.plist"
           plutil -replace NSCameraUsageDescription -string \
             "Meet My Menu uses the camera to photograph restaurant menus so they can be read aloud." "$PLIST"
