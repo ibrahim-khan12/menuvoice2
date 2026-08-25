@@ -31,13 +31,6 @@ workflows:
           npx cap add ios
           npx cap sync ios
 
-      # Capacitor's generated Info.plist has no CFBundleVersion key at all
-      # (not even a $(CURRENT_PROJECT_VERSION) placeholder), so an xcodebuild
-      # build-setting override has nothing to substitute into — write the
-      # value straight into the plist instead. It also has to change on
-      # every build: ios/ is regenerated from scratch each time, so without
-      # this TestFlight would see build "1" again and reject it as a
-      # duplicate of whatever was uploaded last time.
       - name: Add required Info.plist entries
         script: |
           set -e
@@ -47,7 +40,19 @@ workflows:
           plutil -replace NSMicrophoneUsageDescription -string \
             "Meet My Menu uses the microphone for voice commands and questions about the menu." "$PLIST"
           plutil -insert CFBundleURLTypes -json '[{"CFBundleURLSchemes":["com.meetmymenu.app"]}]' "$PLIST"
-          plutil -replace CFBundleVersion -string "$CM_BUILD_NUMBER" "$PLIST"
+
+      # Xcode regenerates Info.plist from project build settings at archive
+      # time (GENERATE_INFOPLIST_FILE), which was silently overwriting our
+      # direct plist edit above and leaving CFBundleVersion unset. agvtool
+      # sets the actual CURRENT_PROJECT_VERSION build setting Xcode reads
+      # from, which also has to be unique per build since ios/ is
+      # regenerated from scratch every time — otherwise TestFlight sees
+      # build "1" again and rejects it as a duplicate.
+      - name: Set the build number
+        script: |
+          set -e
+          cd ios/App
+          agvtool new-version -all "$CM_BUILD_NUMBER"
 
       - name: Set up code signing
         script: |
