@@ -26,6 +26,14 @@ workflows:
           npx cap add ios
           npx cap sync ios
 
+      # cap sync normally runs `pod install` itself, but the generated
+      # App.xcworkspace only exists once CocoaPods has actually run, and
+      # that step has silently no-opped before, so run it explicitly too.
+      - name: Install CocoaPods dependencies
+        script: |
+          cd ios/App
+          pod install
+
       - name: Add required Info.plist entries
         script: |
           PLIST="ios/App/App/Info.plist"
