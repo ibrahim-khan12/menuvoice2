@@ -40,6 +40,12 @@ workflows:
           plutil -replace NSMicrophoneUsageDescription -string \
             "Meet My Menu uses the microphone for voice commands and questions about the menu." "$PLIST"
           plutil -insert CFBundleURLTypes -json '[{"CFBundleURLSchemes":["com.meetmymenu.app"]}]' "$PLIST"
+          # The app only makes standard HTTPS/TLS calls (own API, OpenAI),
+          # no custom encryption, so it's exempt from export compliance
+          # documentation. Declaring this in advance skips the manual
+          # export-compliance question TestFlight otherwise blocks on for
+          # every single build.
+          plutil -replace ITSAppUsesNonExemptEncryption -bool NO "$PLIST"
 
       # Xcode regenerates Info.plist from project build settings at archive
       # time (GENERATE_INFOPLIST_FILE), which was silently overwriting our
