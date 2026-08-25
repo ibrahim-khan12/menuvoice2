@@ -31,6 +31,13 @@ workflows:
           npx cap add ios
           npx cap sync ios
 
+      # Capacitor's generated Info.plist has no CFBundleVersion key at all
+      # (not even a $(CURRENT_PROJECT_VERSION) placeholder), so an xcodebuild
+      # build-setting override has nothing to substitute into — write the
+      # value straight into the plist instead. It also has to change on
+      # every build: ios/ is regenerated from scratch each time, so without
+      # this TestFlight would see build "1" again and reject it as a
+      # duplicate of whatever was uploaded last time.
       - name: Add required Info.plist entries
         script: |
           set -e
@@ -40,21 +47,17 @@ workflows:
           plutil -replace NSMicrophoneUsageDescription -string \
             "Meet My Menu uses the microphone for voice commands and questions about the menu." "$PLIST"
           plutil -insert CFBundleURLTypes -json '[{"CFBundleURLSchemes":["com.meetmymenu.app"]}]' "$PLIST"
+          plutil -replace CFBundleVersion -string "$CM_BUILD_NUMBER" "$PLIST"
 
       - name: Set up code signing
         script: |
           xcode-project use-profiles
 
-      # ios/ is regenerated from scratch every build, so its bundle version
-      # always starts back at 1 — TestFlight rejects that as a duplicate of
-      # whatever was uploaded last time. Codemagic's auto-incrementing build
-      # number keeps every upload's version unique.
       - name: Build the .ipa
         script: |
           xcode-project build-ipa \
             --project "ios/App/App.xcodeproj" \
-            --scheme "App" \
-            --archive-xcargs "CURRENT_PROJECT_VERSION=$CM_BUILD_NUMBER"
+            --scheme "App"
 
     artifacts:
       - build/ios/ipa/*.ipa
