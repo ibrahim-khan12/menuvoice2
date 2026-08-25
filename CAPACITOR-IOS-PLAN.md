@@ -70,15 +70,28 @@ here so it isn't forgotten):
 This was pure web/TypeScript work, no Mac needed, done ahead of step 4 so
 the eventual Codemagic build isn't blocked on it.
 
-### Step 4: When ready to actually build for iOS, use Codemagic
+### Step 4: When ready to actually build for iOS, use Codemagic — done
 
-```
-npm install @capacitor/ios
-```
+Connected to Codemagic, `codemagic.yaml` builds and signs the app entirely
+in the cloud, and pushes straight to TestFlight. Along the way this
+surfaced a few things worth knowing for future builds:
 
-Then connect the repo to Codemagic (free tier) and let it run
-`npx cap add ios` and the Xcode build in the cloud. This is the step that
-needed a Mac before, Codemagic removes that requirement entirely.
+- Capacitor 8's default `cap add ios` uses Swift Package Manager, not
+  CocoaPods, no `Podfile`/`.xcworkspace` gets generated, build against
+  the `.xcodeproj` directly.
+- Xcode regenerates `Info.plist` from build settings at archive time
+  (`GENERATE_INFOPLIST_FILE`), so `CFBundleVersion` can't just be edited
+  in the file, it has to be set via `agvtool` (a fresh UTC timestamp each
+  build, since `ios/` is regenerated from scratch every run and TestFlight
+  rejects a repeated build number as a duplicate).
+- `ITSAppUsesNonExemptEncryption: NO` is set in `Info.plist` so export
+  compliance doesn't need answering by hand for every single build.
+- An Apple Developer Program membership, an App Store Connect API key
+  (Team settings → Integrations → Developer Portal), and an app record
+  in App Store Connect all had to exist before any of this would work.
+
+First successful TestFlight submission is now sitting in Apple's beta
+review queue.
 
 ### Step 5: Camera and microphone
 
