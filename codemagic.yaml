@@ -1,44 +1,63 @@
 workflows:
-  ios-workflow:
-    name: Meet My Menu iOS
-    max_build_duration: 120
+  ios-build:
+    name: iOS build
+    max_build_duration: 60
     instance_type: mac_mini_m2
-
+    integrations:
+      app_store_connect: meetmymenu apple codemagic ci
     environment:
+      node: 22
+      vars:
+        VITE_GOOGLE_CLIENT_ID: $VITE_GOOGLE_CLIENT_ID
       ios_signing:
         distribution_type: app_store
         bundle_identifier: com.meetmymenu.app
-      node: latest
-
     scripts:
       - name: Install dependencies
-        script: |
-          npm install
+        script: npm ci
 
-      - name: Build web app
-        script: |
-          npm run build
+      - name: Build the web app
+        script: npm run build
 
-      - name: Sync Capacitor
+      - name: Add and sync the iOS platform
         script: |
+          set -e
+          npx cap add ios
           npx cap sync ios
 
-      - name: Install CocoaPods
+      - name: Add required Info.plist entries
         script: |
-          cd ios/App
-          pod install
+          set -e
+          PLIST="ios/App/App/Info.plist"
+          plutil -replace NSCameraUsageDescription -string \
+            "Meet My Menu uses the camera to photograph restaurant menus so they can be read aloud." "$PLIST"
+          plutil -replace NSMicrophoneUsageDescription -string \
+            "Meet My Menu uses the microphone for voice commands and questions about the menu." "$PLIST"
+          plutil -insert CFBundleURLTypes -json '[{"CFBundleURLSchemes":["com.meetmymenu.app"]}]' "$PLIST"
+          plutil -replace ITSAppUsesNonExemptEncryption -bool NO "$PLIST"
 
-      - name: Set up iOS signing
+      - name: Set the build number
+        script: |
+          set -e
+          BUILD_NUMBER=$(date -u +%Y%m%d%H%M)
+          echo "Using build number: $BUILD_NUMBER"
+          cd ios/App
+          agvtool new-version -all "$BUILD_NUMBER"
+
+      - name: Set up code signing
         script: |
           xcode-project use-profiles
 
-      - name: Build IPA
+      - name: Build the .ipa
         script: |
-          cd ios/App
           xcode-project build-ipa \
-            --workspace "App.xcworkspace" \
+            --project "ios/App/App.xcodeproj" \
             --scheme "App"
 
     artifacts:
-      - ios/App/build/ios/ipa/*.ipa
-      - /tmp/xcodebuild_logs/*.log
+      - build/ios/ipa/*.ipa
+
+    publishing:
+      app_store_connect:
+        auth: integration
+        submit_to_testflight: true
