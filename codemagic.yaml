@@ -7,8 +7,8 @@ workflows:
       app_store_connect: meetmymenu apple codemagic ci
     environment:
       node: 22
-      vars:
-        VITE_GOOGLE_CLIENT_ID: $VITE_GOOGLE_CLIENT_ID
+      groups:
+        - ios-google-oauth
       ios_signing:
         distribution_type: app_store
         bundle_identifier: com.meetmymenu.app
