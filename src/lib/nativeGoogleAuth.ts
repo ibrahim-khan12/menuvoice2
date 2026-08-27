@@ -15,7 +15,7 @@ export const isNativePlatform = Capacitor.isNativePlatform();
 // allowed for "iOS" type OAuth clients, and this app currently only has a
 // Web client). oauth-callback.html is a static page on our own domain whose
 // only job is bouncing the token from that https redirect into this scheme.
-const REDIRECT_PAGE = 'https://meetmymenu.com/oauth-callback.html';
+const REDIRECT_PAGE = 'https://app.meetmymenu.com/oauth-callback.html';
 const APP_CALLBACK_PREFIX = 'com.meetmymenu.app://oauth-callback';
 
 function randomNonce(): string {
