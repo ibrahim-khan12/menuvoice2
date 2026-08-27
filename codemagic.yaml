@@ -66,11 +66,25 @@ workflows:
         script: |
           xcode-project use-profiles
 
+      # Xcode regenerates Info.plist from build settings at archive time
+      # (GENERATE_INFOPLIST_FILE), the same mechanism that was silently
+      # dropping CFBundleVersion earlier — camera/mic never prompted for
+      # permission on a real device because NSCameraUsageDescription and
+      # NSMicrophoneUsageDescription weren't actually surviving into the
+      # built app either. INFOPLIST_KEY_* build settings are the
+      # Apple-documented way to set these for a generated Info.plist, so an
+      # xcconfig is more reliable here than editing the plist file directly.
       - name: Build the .ipa
         script: |
+          set -e
+          cat > ios/App/permissions.xcconfig << 'XCCONFIG'
+          INFOPLIST_KEY_NSCameraUsageDescription = Meet My Menu uses the camera to photograph restaurant menus so they can be read aloud.
+          INFOPLIST_KEY_NSMicrophoneUsageDescription = Meet My Menu uses the microphone for voice commands and questions about the menu.
+          XCCONFIG
           xcode-project build-ipa \
             --project "ios/App/App.xcodeproj" \
-            --scheme "App"
+            --scheme "App" \
+            --archive-xcargs "-xcconfig ios/App/permissions.xcconfig"
 
     artifacts:
       - build/ios/ipa/*.ipa
