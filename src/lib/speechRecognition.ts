@@ -4,7 +4,9 @@
 // instead of MediaRecorder + Web Audio VAD. The native implementation has:
 // - Built-in silence detection (2s timer submits the transcript automatically)
 // - Reliable on iOS Safari (webkitSpeechRecognition works; Web Audio VAD does not)
-// - Auto-restart when iOS cuts the session short mid-session
+// - A completed native recognition session ends the turn instead of silently
+//   reopening the microphone. That keeps Press to Talk finite and hands the
+//   conversation back to app speech after the guest stops talking.
 
 import { track } from './telemetry';
 
@@ -54,8 +56,10 @@ export class SpeechManager {
   private processor: ScriptProcessorNode | null = null;
   private usingCartesia = false;
   private shouldRestart = false;
+  private sessionActive = false;
+  private cartesiaRun = 0;
+  private cartesiaClosing = false;
   private lastTranscript = '';
-  private restartTimeout: ReturnType<typeof setTimeout> | null = null;
   private silenceTimer: ReturnType<typeof setTimeout> | null = null;
   // Wait this long after the guest stops talking before submitting their turn.
   // Kept generous on purpose: cutting a blind guest off mid-thought is far worse
@@ -91,6 +95,7 @@ export class SpeechManager {
     if (!this.recognition) return;
 
     this.recognition.onresult = (event: SREvent) => {
+      if (!this.shouldRestart) return;
       const result = event.results[event.results.length - 1];
       const t = result[0].transcript;
       if (result.isFinal || t.length > 0) {
@@ -108,6 +113,7 @@ export class SpeechManager {
     };
 
     this.recognition.onerror = (event: SRErrorEvent) => {
+      if (!this.sessionActive) return;
       if (event.error === 'not-allowed' || event.error === 'audio-capture') {
         this.clearSilenceTimer();
         this.shouldRestart = false;
@@ -131,16 +137,23 @@ export class SpeechManager {
       }
 
       if (this.shouldRestart) {
-        this.restartTimeout = setTimeout(() => {
-          try { this.recognition?.start(); } catch {}
-        }, 300);
+        // Native recognition ends after a period of silence. Treat that as the
+        // end of this Press to Talk turn; restarting here was what left the
+        // microphone open indefinitely when no further words arrived.
+        const t = this.lastTranscript;
+        this.lastTranscript = '';
+        this.shouldRestart = false;
+        this.onTranscript(t);
       }
     };
   }
 
   start() {
     if (this.usingCartesia) {
-      this.startCartesia().catch((error) => {
+      this.sessionActive = true;
+      const run = ++this.cartesiaRun;
+      this.startCartesia(run).catch((error) => {
+        if (!this.isCurrentCartesiaRun(run)) return;
         console.warn('Cartesia realtime STT failed:', error);
         track('speech', 'stt_error', {
           outcome: 'failure',
@@ -150,6 +163,7 @@ export class SpeechManager {
       });
       return;
     }
+    this.sessionActive = true;
     this.shouldRestart = true;
     this.lastTranscript = '';
     try { this.recognition?.start(); } catch {}
@@ -157,21 +171,21 @@ export class SpeechManager {
 
   stop() {
     if (this.usingCartesia) {
+      this.sessionActive = false;
+      this.cartesiaRun += 1;
       this.stopCartesia(false);
       return;
     }
+    this.sessionActive = false;
     this.shouldRestart = false;
     this.clearSilenceTimer();
-    if (this.restartTimeout !== null) {
-      clearTimeout(this.restartTimeout);
-      this.restartTimeout = null;
-    }
     this.recognition?.stop();
   }
 
   submitNow() {
     if (this.usingCartesia) {
       if (this.ws?.readyState === WebSocket.OPEN) {
+        this.cartesiaClosing = true;
         this.ws.send(JSON.stringify({ type: 'close' }));
       } else if (this.lastTranscript) {
         const t = this.lastTranscript;
@@ -190,40 +204,68 @@ export class SpeechManager {
 
   destroy() {
     if (this.usingCartesia) {
+      this.sessionActive = false;
+      this.cartesiaRun += 1;
       this.stopCartesia(false);
       return;
     }
+    this.sessionActive = false;
     this.shouldRestart = false;
     this.clearSilenceTimer();
-    if (this.restartTimeout !== null) {
-      clearTimeout(this.restartTimeout);
-      this.restartTimeout = null;
-    }
     this.recognition?.abort();
     this.recognition = null;
   }
 
-  private async startCartesia() {
+  private isCurrentCartesiaRun(run: number): boolean {
+    return this.sessionActive && this.cartesiaRun === run;
+  }
+
+  private armCartesiaSilenceTimer(run: number) {
+    this.clearSilenceTimer();
+    this.silenceTimer = setTimeout(() => {
+      this.silenceTimer = null;
+      if (!this.isCurrentCartesiaRun(run) || this.cartesiaClosing) return;
+      if (this.ws?.readyState === WebSocket.OPEN) {
+        // Cartesia has already sent text for this turn, so a quiet interval is
+        // the same turn boundary as the browser recognizer's silence timeout.
+        this.cartesiaClosing = true;
+        try { this.ws.send(JSON.stringify({ type: 'close' })); } catch {}
+      }
+    }, SpeechManager.SILENCE_MS);
+  }
+
+  private async startCartesia(run: number) {
     this.stopCartesia(false);
     this.lastTranscript = '';
+    this.cartesiaClosing = false;
     const tokenRes = await fetch('/api/transcribe?cartesiaToken=1', { method: 'POST' });
     if (!tokenRes.ok) throw new Error(await tokenRes.text());
     const tokenData = await tokenRes.json();
     const token = tokenData?.token;
     if (!token) throw new Error('No Cartesia access token returned.');
+    if (!this.isCurrentCartesiaRun(run)) return;
 
-    this.stream = await navigator.mediaDevices.getUserMedia({
+    const stream = await navigator.mediaDevices.getUserMedia({
       audio: {
         echoCancellation: true,
         noiseSuppression: true,
         autoGainControl: true,
       },
     });
+    if (!this.isCurrentCartesiaRun(run)) {
+      stream.getTracks().forEach((track) => track.stop());
+      return;
+    }
+    this.stream = stream;
 
     const AudioCtor = (window as any).AudioContext || (window as any).webkitAudioContext;
     const audioContext = new AudioCtor() as AudioContext;
     this.audioContext = audioContext;
     await audioContext.resume();
+    if (!this.isCurrentCartesiaRun(run)) {
+      this.stopCartesia(false);
+      return;
+    }
 
     const url = new URL('wss://api.cartesia.ai/stt/turns/websocket');
     url.searchParams.set('model', 'ink-2');
@@ -234,11 +276,17 @@ export class SpeechManager {
 
     this.ws = new WebSocket(url);
     this.ws.binaryType = 'arraybuffer';
-    this.ws.onmessage = (event) => this.handleCartesiaMessage(event.data);
+    this.ws.onmessage = (event) => {
+      if (this.isCurrentCartesiaRun(run)) this.handleCartesiaMessage(event.data, run);
+    };
     this.ws.onerror = () => {
       track('speech', 'stt_error', { outcome: 'failure', metadata: { provider: 'cartesia', error: 'websocket' } });
     };
-    this.ws.onclose = () => this.stopCartesia(false);
+    this.ws.onclose = () => {
+      if (!this.isCurrentCartesiaRun(run)) return;
+      this.sessionActive = false;
+      this.stopCartesia(false);
+    };
 
     const source = audioContext.createMediaStreamSource(this.stream);
     const processor = audioContext.createScriptProcessor(4096, 1, 1);
@@ -253,7 +301,7 @@ export class SpeechManager {
     processor.connect(audioContext.destination);
   }
 
-  private handleCartesiaMessage(raw: any) {
+  private handleCartesiaMessage(raw: any, run: number) {
     let msg: any;
     try { msg = JSON.parse(String(raw)); } catch { return; }
     if (msg.type === 'turn.start') {
@@ -261,12 +309,16 @@ export class SpeechManager {
       return;
     }
     if (msg.type === 'turn.update' || msg.type === 'turn.eager_end') {
-      if (typeof msg.transcript === 'string') this.lastTranscript = msg.transcript;
+      if (typeof msg.transcript === 'string') {
+        this.lastTranscript = msg.transcript;
+        this.armCartesiaSilenceTimer(run);
+      }
       return;
     }
     if (msg.type === 'turn.end') {
       const transcript = typeof msg.transcript === 'string' ? msg.transcript.trim() : this.lastTranscript.trim();
       this.lastTranscript = '';
+      this.sessionActive = false;
       this.stopCartesia(false);
       if (transcript) this.onTranscript(transcript);
       return;
@@ -276,12 +328,14 @@ export class SpeechManager {
         outcome: 'failure',
         metadata: { provider: 'cartesia', error: msg.message ?? msg.title ?? 'error' },
       });
+      this.sessionActive = false;
       this.stopCartesia(false);
       this.onError('I had trouble hearing you. Please try again.');
     }
   }
 
   private stopCartesia(sendClose: boolean) {
+    this.clearSilenceTimer();
     if (sendClose && this.ws?.readyState === WebSocket.OPEN) {
       try { this.ws.send(JSON.stringify({ type: 'close' })); } catch {}
     }

@@ -12,7 +12,7 @@
 //   App is silent; user browses the semantic MenuDocument with VoiceOver.
 //   Conversation text is still updated in an aria-live region.
 
-import { useEffect, useRef, useState, type MouseEvent } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Screen, SecondaryButton } from '../components';
 import { ScreenProps, Route } from '../nav';
 import { ChatTurn, DiningHistoryEntry, ParsedMenu } from '../types';
@@ -350,7 +350,7 @@ export default function ConversationScreen({
     }
 
     speechManagerRef.current?.destroy();
-    speechManagerRef.current = new SpeechManager(
+    const manager = new SpeechManager(
       (userText: string) => {
         earconStop();
         try { navigator.vibrate?.([80]); } catch {}
@@ -364,11 +364,18 @@ export default function ConversationScreen({
         await speak(msg, profile.ttsVoice);
       },
     );
+    speechManagerRef.current = manager;
 
     earconStart();
     try { navigator.vibrate?.([30, 40, 30]); } catch {}
     await new Promise<void>((r) => setTimeout(r, 150));
-    speechManagerRef.current.start();
+    // Pause can be pressed during the short start cue. Do not let that pending
+    // turn reopen the microphone after Pause Voice has already shut it down.
+    if (pausedRef.current || speechManagerRef.current !== manager) {
+      manager.destroy();
+      return;
+    }
+    manager.start();
     setPhase('recording');
   };
   startMicRef.current = startMic;
@@ -578,20 +585,6 @@ export default function ConversationScreen({
     startMicRef.current();
   };
 
-  const onConversationSurfaceClick = (event: MouseEvent<HTMLElement>) => {
-    if (phase !== 'speaking') return;
-    const target = event.target as HTMLElement | null;
-    if (!target) return;
-    if (
-      target.closest(
-        'button, a, input, select, textarea, label, [role="button"], [role="link"], [role="menuitem"], [role="radio"], [role="checkbox"], [tabindex]:not([tabindex="-1"])',
-      )
-    ) {
-      return;
-    }
-    interruptAndListen();
-  };
-
   const toggleSpeakMode = () => {
     unlockAudio();
     if (speakMode) {
@@ -686,11 +679,7 @@ export default function ConversationScreen({
 
   return (
     <Screen>
-      <section
-        className="conversation-layout"
-        onClick={onConversationSurfaceClick}
-        aria-label={phase === 'speaking' ? 'Meet My Menu AI is speaking. Tap empty space to interrupt.' : undefined}
-      >
+      <section className="conversation-layout">
       <h1 className="heading" style={{ marginTop: 4 }}>{restaurantName}</h1>
 
       {/* Incomplete-menu notice — first thing on the page, one sentence, with
