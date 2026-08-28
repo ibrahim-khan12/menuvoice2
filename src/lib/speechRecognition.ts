@@ -7,10 +7,19 @@
 // - A completed native recognition session ends the turn instead of silently
 //   reopening the microphone. That keeps Press to Talk finite and hands the
 //   conversation back to app speech after the guest stops talking.
+//
+// webkitSpeechRecognition is Safari-only in a deeper sense than the name
+// suggests: WebKit only grants the underlying system speech-recognition
+// service to Safari's own process. Inside any embedded WKWebView — which is
+// what every Capacitor app's WebView is — the constructor still exists, but
+// starting it fails before ever touching microphone permission at all. No
+// Info.plist change can fix that; the native app has to use a getUserMedia
+// + WebSocket path instead, which the Cartesia branch below already is.
 
+import { Capacitor } from '@capacitor/core';
 import { track } from './telemetry';
 
-const STT_PROVIDER = import.meta.env.VITE_STT_PROVIDER ?? 'browser';
+const STT_PROVIDER = Capacitor.isNativePlatform() ? 'cartesia' : (import.meta.env.VITE_STT_PROVIDER ?? 'browser');
 const CARTESIA_VERSION = '2026-03-01';
 
 // Minimal types for Web Speech API — not in all TypeScript DOM lib versions.
