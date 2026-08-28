@@ -11,6 +11,11 @@
 import { synthesizeSpeech, hasApiKey } from './openai';
 import { track } from './telemetry';
 import { unlockAudio as unlockBaseAudio } from './audioUnlock';
+import { Capacitor } from '@capacitor/core';
+
+// The native app must use generated audio from the same Cartesia-backed API as
+// the web app. Never silently substitute Apple's speechSynthesis voice there.
+const ALLOW_BROWSER_TTS_FALLBACK = !Capacitor.isNativePlatform();
 
 // Monotonic counter. stopSpeaking() increments it, invalidating every in-flight
 // playback path in one atomic move — structural guarantee against overlap.
@@ -205,6 +210,7 @@ function applyBestVoice(u: SpeechSynthesisUtterance) {
 
 async function playBrowser(text: string, epoch: number): Promise<void> {
   if (epoch !== speechEpoch) return;
+  if (!ALLOW_BROWSER_TTS_FALLBACK) return;
   return new Promise<void>((resolve) => {
     if (!('speechSynthesis' in window)) return resolve();
     const u = new SpeechSynthesisUtterance(text);
@@ -230,14 +236,18 @@ async function playUtterance(text: string, voice: string | undefined, epoch: num
       track('speech', 'tts_end', { outcome: 'success', durationMs: Date.now() - t0 });
       return;
     } catch (e) {
-      console.warn('OpenAI TTS failed, falling back to browser voice:', e);
+      console.warn('Generated TTS failed:', e);
       track('speech', 'tts_fallback', { metadata: { reason: 'openai_failed' } });
     }
   } else {
     track('speech', 'tts_fallback', { metadata: { reason: 'no_api_key' } });
   }
-  await playBrowser(text, epoch);
-  track('speech', 'tts_end', { outcome: 'success', durationMs: Date.now() - t0, metadata: { via: 'browser' } });
+  if (ALLOW_BROWSER_TTS_FALLBACK) {
+    await playBrowser(text, epoch);
+    track('speech', 'tts_end', { outcome: 'success', durationMs: Date.now() - t0, metadata: { via: 'browser' } });
+  } else {
+    track('speech', 'tts_end', { outcome: 'failure', durationMs: Date.now() - t0, metadata: { via: 'native-api' } });
+  }
 }
 
 export async function speak(text: string, voice?: string): Promise<void> {
@@ -341,7 +351,7 @@ export function createStreamingSpeech(
         }
       }
       if (myEpoch !== speechEpoch) { cancelled = true; break; }
-      await playBrowser(sentence, myEpoch);
+      if (ALLOW_BROWSER_TTS_FALLBACK) await playBrowser(sentence, myEpoch);
     }
     draining = false;
     if (drainDone) {

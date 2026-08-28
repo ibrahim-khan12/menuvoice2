@@ -11,6 +11,7 @@ import { track } from './telemetry';
 import { provenanceSummary } from './provenance';
 import { sanitizeMenu } from './menuSanitizer';
 import { apiErrorMessage } from './errors';
+import { apiUrl } from './apiUrl';
 
 export { sanitizeMenu } from './menuSanitizer';
 
@@ -48,7 +49,7 @@ async function chatCompletions(body: object): Promise<any> {
     if (!res.ok) throw new Error(await parseApiError(res));
     return res.json();
   }
-  const res = await fetch('/api/chat', {
+  const res = await fetch(apiUrl('/api/chat'), {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(body),
@@ -67,7 +68,7 @@ async function audioTranscriptions(form: FormData): Promise<any> {
     if (!res.ok) throw new Error(await parseApiError(res));
     return res.json();
   }
-  const res = await fetch('/api/transcribe', { method: 'POST', body: form });
+  const res = await fetch(apiUrl('/api/transcribe'), { method: 'POST', body: form });
   if (!res.ok) throw new Error(await parseApiError(res));
   return res.json();
 }
@@ -82,7 +83,7 @@ async function audioSpeech(body: object): Promise<Blob> {
     if (!res.ok) throw new Error(await parseApiError(res));
     return res.blob();
   }
-  const res = await fetch('/api/tts', {
+  const res = await fetch(apiUrl('/api/tts'), {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(body),
@@ -264,7 +265,7 @@ export async function chatReplyStream(
       body: JSON.stringify(body),
     });
   } else {
-    res = await fetch('/api/chat', {
+    res = await fetch(apiUrl('/api/chat'), {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(body),
@@ -383,7 +384,7 @@ export async function parseMenuFromUrl(
   signal?: AbortSignal,
 ): Promise<{ menu: ParsedMenu; provenance?: MenuProvenance; sourceUrl?: string }> {
   const t0 = Date.now();
-  const res = await fetch('/api/menu-from-url', {
+  const res = await fetch(apiUrl('/api/menu-from-url'), {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ url }),
@@ -418,7 +419,7 @@ export async function parseMenuFromUrl(
  * Throws a friendly Error when the menu isn't online. */
 export async function findMenuByName(query: string, signal?: AbortSignal): Promise<{ menu: ParsedMenu; restaurantName: string | null; address?: string | null; sourceUrl?: string; provenance?: MenuProvenance }> {
   const t0 = Date.now();
-  const res = await fetch('/api/find-menu', {
+  const res = await fetch(apiUrl('/api/find-menu'), {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ query }),

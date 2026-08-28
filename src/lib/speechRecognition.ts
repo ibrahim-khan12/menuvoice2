@@ -18,6 +18,9 @@
 
 import { Capacitor } from '@capacitor/core';
 import { track } from './telemetry';
+import { transcribeAudio } from './openai';
+import { Capacitor } from '@capacitor/core';
+import { apiUrl } from './apiUrl';
 
 const STT_PROVIDER = Capacitor.isNativePlatform() ? 'cartesia' : (import.meta.env.VITE_STT_PROVIDER ?? 'browser');
 const CARTESIA_VERSION = '2026-03-01';
@@ -42,6 +45,16 @@ interface SRErrorEvent extends Event { error: string; message: string; }
 
 export function isSpeechRecognitionSupported(): boolean {
   if (typeof window === 'undefined') return false;
+  // Capacitor runs inside WKWebView, where Safari's webkitSpeechRecognition
+  // is not reliably exposed. The native shell can still record audio through
+  // getUserMedia/MediaRecorder and send it to our existing transcription API.
+  if (
+    Capacitor.isNativePlatform() &&
+    !!navigator.mediaDevices?.getUserMedia &&
+    typeof MediaRecorder !== 'undefined'
+  ) {
+    return true;
+  }
   if (
     STT_PROVIDER === 'cartesia' &&
     !!navigator.mediaDevices?.getUserMedia &&
@@ -64,6 +77,9 @@ export class SpeechManager {
   private source: MediaStreamAudioSourceNode | null = null;
   private processor: ScriptProcessorNode | null = null;
   private usingCartesia = false;
+  private usingNativeRecorder = false;
+  private nativeRecorder: MediaRecorder | null = null;
+  private nativeChunks: BlobPart[] = [];
   private shouldRestart = false;
   private sessionActive = false;
   private cartesiaRun = 0;
@@ -81,6 +97,8 @@ export class SpeechManager {
   ) {
     this.usingCartesia = STT_PROVIDER === 'cartesia';
     if (this.usingCartesia) return;
+    this.usingNativeRecorder = Capacitor.isNativePlatform();
+    if (this.usingNativeRecorder) return;
     if (!isSpeechRecognitionSupported()) return;
     const Ctor =
       (window as any).SpeechRecognition ||
@@ -172,6 +190,26 @@ export class SpeechManager {
       });
       return;
     }
+    if (this.usingNativeRecorder) {
+      this.sessionActive = true;
+      const run = ++this.cartesiaRun;
+      this.startNativeRecording(run).catch((error) => {
+        if (!this.isCurrentCartesiaRun(run)) return;
+        this.sessionActive = false;
+        this.stopNativeRecording();
+        console.warn('Native microphone recording failed:', error);
+        track('speech', 'stt_error', {
+          outcome: 'failure',
+          metadata: { provider: 'native-recorder', error: error?.name ?? error?.message ?? String(error) },
+        });
+        this.onError(
+          error?.name === 'NotAllowedError'
+            ? 'I need microphone access to hear you. Allow microphone access in iPhone Settings, then tap Try again.'
+            : 'I had trouble starting the microphone. Please try again.',
+        );
+      });
+      return;
+    }
     this.sessionActive = true;
     this.shouldRestart = true;
     this.lastTranscript = '';
@@ -183,6 +221,12 @@ export class SpeechManager {
       this.sessionActive = false;
       this.cartesiaRun += 1;
       this.stopCartesia(false);
+      return;
+    }
+    if (this.usingNativeRecorder) {
+      this.sessionActive = false;
+      this.cartesiaRun += 1;
+      this.stopNativeRecording();
       return;
     }
     this.sessionActive = false;
@@ -203,6 +247,36 @@ export class SpeechManager {
       }
       return;
     }
+    if (this.usingNativeRecorder) {
+      const recorder = this.nativeRecorder;
+      if (!recorder || recorder.state !== 'recording') return;
+      const run = this.cartesiaRun;
+      recorder.onstop = () => {
+        const mimeType = recorder.mimeType || 'audio/mp4';
+        const blob = this.nativeChunks.length ? new Blob(this.nativeChunks, { type: mimeType }) : null;
+        this.nativeChunks = [];
+        this.stopNativeStream();
+        this.nativeRecorder = null;
+        if (!blob || !this.isCurrentCartesiaRun(run)) return;
+        transcribeAudio(blob).then((transcript) => {
+          if (!this.isCurrentCartesiaRun(run)) return;
+          this.sessionActive = false;
+          if (transcript) this.onTranscript(transcript);
+          else this.onError("I didn't catch that. Please try again.");
+        }).catch((error) => {
+          if (!this.isCurrentCartesiaRun(run)) return;
+          this.sessionActive = false;
+          console.warn('Native microphone transcription failed:', error);
+          track('speech', 'stt_error', {
+            outcome: 'failure',
+            metadata: { provider: 'native-recorder', stage: 'transcribe', error: error?.message ?? String(error) },
+          });
+          this.onError('I had trouble transcribing that. Please try again.');
+        });
+      };
+      recorder.stop();
+      return;
+    }
     this.clearSilenceTimer();
     const t = this.lastTranscript;
     this.lastTranscript = '';
@@ -218,6 +292,12 @@ export class SpeechManager {
       this.stopCartesia(false);
       return;
     }
+    if (this.usingNativeRecorder) {
+      this.sessionActive = false;
+      this.cartesiaRun += 1;
+      this.stopNativeRecording();
+      return;
+    }
     this.sessionActive = false;
     this.shouldRestart = false;
     this.clearSilenceTimer();
@@ -227,6 +307,52 @@ export class SpeechManager {
 
   private isCurrentCartesiaRun(run: number): boolean {
     return this.sessionActive && this.cartesiaRun === run;
+  }
+
+  private async startNativeRecording(run: number) {
+    this.stopNativeRecording();
+    this.nativeChunks = [];
+    const stream = await navigator.mediaDevices.getUserMedia({
+      audio: {
+        echoCancellation: true,
+        noiseSuppression: true,
+        autoGainControl: true,
+      },
+    });
+    if (!this.isCurrentCartesiaRun(run)) {
+      stream.getTracks().forEach((track) => track.stop());
+      return;
+    }
+    this.stream = stream;
+
+    const candidates = ['audio/mp4', 'audio/webm'];
+    const mimeType = candidates.find((candidate) => MediaRecorder.isTypeSupported(candidate));
+    const recorder = mimeType
+      ? new MediaRecorder(stream, { mimeType })
+      : new MediaRecorder(stream);
+    this.nativeRecorder = recorder;
+    recorder.ondataavailable = (event) => {
+      if (event.data.size > 0) this.nativeChunks.push(event.data);
+    };
+    recorder.start();
+    track('speech', 'stt_turn_start', { metadata: { provider: 'native-recorder' } });
+  }
+
+  private stopNativeStream() {
+    if (this.stream) {
+      this.stream.getTracks().forEach((track) => track.stop());
+      this.stream = null;
+    }
+  }
+
+  private stopNativeRecording() {
+    if (this.nativeRecorder && this.nativeRecorder.state !== 'inactive') {
+      this.nativeRecorder.onstop = null;
+      try { this.nativeRecorder.stop(); } catch {}
+    }
+    this.nativeRecorder = null;
+    this.nativeChunks = [];
+    this.stopNativeStream();
   }
 
   private armCartesiaSilenceTimer(run: number) {
@@ -247,7 +373,7 @@ export class SpeechManager {
     this.stopCartesia(false);
     this.lastTranscript = '';
     this.cartesiaClosing = false;
-    const tokenRes = await fetch('/api/transcribe?cartesiaToken=1', { method: 'POST' });
+    const tokenRes = await fetch(apiUrl('/api/transcribe?cartesiaToken=1'), { method: 'POST' });
     if (!tokenRes.ok) throw new Error(await tokenRes.text());
     const tokenData = await tokenRes.json();
     const token = tokenData?.token;
