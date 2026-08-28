@@ -19,7 +19,6 @@
 import { Capacitor } from '@capacitor/core';
 import { track } from './telemetry';
 import { transcribeAudio } from './openai';
-import { Capacitor } from '@capacitor/core';
 import { apiUrl } from './apiUrl';
 
 const STT_PROVIDER = Capacitor.isNativePlatform() ? 'cartesia' : (import.meta.env.VITE_STT_PROVIDER ?? 'browser');
