@@ -48,27 +48,53 @@ workflows:
         script: |
           xcode-project use-profiles
 
-      # Xcode regenerates Info.plist from build settings at archive time
-      # (GENERATE_INFOPLIST_FILE), the same mechanism that drops
-      # CFBundleVersion if it isn't set as a build setting too — camera/mic
-      # never prompted for permission on a real device because
-      # NSCameraUsageDescription and NSMicrophoneUsageDescription weren't
-      # actually surviving into the built app. INFOPLIST_KEY_* build
-      # settings are the Apple-documented way to set these for a generated
-      # Info.plist, so an xcconfig is more reliable here than editing the
-      # plist file directly (which the step above still does, harmlessly,
-      # as a fallback).
-      - name: Build the .ipa
+      # A prior attempt set these via `-xcconfig` through --archive-xcargs,
+      # but the real device build still never prompted for camera/mic
+      # access afterward — there's no proof that flag was actually honored
+      # by the xcode-project wrapper, only that the build didn't error.
+      # Editing project.pbxproj directly (via the xcodeproj gem) can't be
+      # silently dropped by an intermediate tool the way a CLI flag can:
+      # this writes INFOPLIST_KEY_NSCameraUsageDescription /
+      # INFOPLIST_KEY_NSMicrophoneUsageDescription onto every build
+      # configuration of every target, which is what GENERATE_INFOPLIST_FILE
+      # actually reads from when it synthesizes Info.plist at archive time.
+      - name: Set iOS permission strings as build settings
         script: |
           set -e
-          cat > ios/App/permissions.xcconfig << 'XCCONFIG'
-          INFOPLIST_KEY_NSCameraUsageDescription = Meet My Menu uses the camera to photograph restaurant menus so they can be read aloud.
-          INFOPLIST_KEY_NSMicrophoneUsageDescription = Meet My Menu uses the microphone for voice commands and questions about the menu.
-          XCCONFIG
+          gem list -i xcodeproj > /dev/null || gem install xcodeproj --no-document
+          ruby -e '
+            require "xcodeproj"
+            project = Xcodeproj::Project.open("ios/App/App.xcodeproj")
+            project.targets.each do |target|
+              target.build_configurations.each do |config|
+                config.build_settings["INFOPLIST_KEY_NSCameraUsageDescription"] =
+                  "Meet My Menu uses the camera to photograph restaurant menus so they can be read aloud."
+                config.build_settings["INFOPLIST_KEY_NSMicrophoneUsageDescription"] =
+                  "Meet My Menu uses the microphone for voice commands and questions about the menu."
+              end
+            end
+            project.save
+          '
+
+      - name: Build the .ipa
+        script: |
           xcode-project build-ipa \
             --project "ios/App/App.xcodeproj" \
-            --scheme "App" \
-            --archive-xcargs "-xcconfig ios/App/permissions.xcconfig"
+            --scheme "App"
+
+      # Read back the actual shipped Info.plist instead of assuming the step
+      # above worked — this is the only way to get real proof, since a
+      # green build here doesn't mean the keys made it into the binary
+      # (that's exactly how the previous, silently-ineffective fix looked
+      # too).
+      - name: Verify permission strings made it into the built app
+        script: |
+          set -e
+          cd build/ios/ipa
+          unzip -o -q App.ipa -d _inspect
+          echo "--- Final Info.plist: camera/mic/URL keys ---"
+          plutil -extract NSCameraUsageDescription raw _inspect/Payload/*.app/Info.plist
+          plutil -extract NSMicrophoneUsageDescription raw _inspect/Payload/*.app/Info.plist
 
     artifacts:
       - build/ios/ipa/*.ipa
