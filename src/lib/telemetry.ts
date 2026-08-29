@@ -2,6 +2,8 @@
 // for crash-safety, and flushes to /api/events on a timer and on page hide.
 // Fire-and-forget: telemetry errors never surface to callers.
 
+import { apiUrl } from './apiUrl';
+
 const SESSION_KEY = 'mv.tel.sid';
 const QUEUE_KEY_PREFIX = 'mv.tel.queue';
 const FLUSH_MS = 10_000;
@@ -138,12 +140,12 @@ async function flush(beacon = false) {
   }
   persistNow();
   if (beacon && navigator.sendBeacon) {
-    const ok = navigator.sendBeacon('/api/events', new Blob([body], { type: 'application/json' }));
+    const ok = navigator.sendBeacon(apiUrl('/api/events'), new Blob([body], { type: 'application/json' }));
     if (!ok) { _queue.unshift(...batch); persistNow(); }
     return;
   }
   try {
-    const r = await fetch('/api/events', {
+    const r = await fetch(apiUrl('/api/events'), {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body,

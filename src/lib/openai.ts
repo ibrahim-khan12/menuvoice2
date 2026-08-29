@@ -12,6 +12,7 @@ import { provenanceSummary } from './provenance';
 import { sanitizeMenu } from './menuSanitizer';
 import { apiErrorMessage } from './errors';
 import { apiUrl } from './apiUrl';
+import { Capacitor } from '@capacitor/core';
 
 export { sanitizeMenu } from './menuSanitizer';
 
@@ -29,10 +30,15 @@ const TTS_VOICE_DEFAULT = 'shimmer';
 // True when the direct browser→OpenAI path is available (local dev only).
 const DIRECT = DIRECT_KEY.startsWith('sk-') && DIRECT_KEY.length > 20;
 
-export function hasApiKey(): boolean {
+export function hasApiKey(
+  hostname = window.location.hostname,
+  native = Capacitor.isNativePlatform(),
+): boolean {
   // Always true in production because the proxy holds the key.
-  // In local dev, true if VITE_OPENAI_API_KEY is set.
-  return DIRECT || window.location.hostname !== 'localhost';
+  // Capacitor also uses a localhost hostname, but its API requests are routed
+  // to the production backend by apiUrl(). Only a real localhost web session
+  // needs a direct VITE_OPENAI_API_KEY.
+  return DIRECT || native || hostname !== 'localhost';
 }
 
 function directHeaders(extra?: Record<string, string>) {
