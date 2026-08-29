@@ -79,22 +79,32 @@ function jsonCapped(v: unknown, max: number): string | null {
   }
 }
 
-// Same-origin guard: the app posts to its own /api/events via fetch/sendBeacon,
-// which always carries an Origin/Referer of the deployment host. Cross-origin
-// floods (no matching host) are dropped. Server-side callers (no Origin) pass.
-function originAllowed(req: VercelRequest): boolean {
-  const host = req.headers.host;
-  if (!host) return true;
-  const src = (req.headers.origin || req.headers.referer || '') as string;
-  if (!src) return true; // non-browser / same-origin beacon without Origin
+const CAPACITOR_ORIGIN = 'capacitor://localhost';
+
+export function isAllowedEventOrigin(host: string | undefined, source: string): boolean {
+  if (!host || !source) return true;
+  if (source === CAPACITOR_ORIGIN || source.startsWith(`${CAPACITOR_ORIGIN}/`)) return true;
   try {
-    return new URL(src).host === host;
+    return new URL(source).host === host;
   } catch {
     return false;
   }
 }
 
+// Web traffic must come from the deployment host. The signed native bundle is
+// served from capacitor://localhost, so allow exactly that custom origin too.
+function originAllowed(req: VercelRequest): boolean {
+  const host = req.headers.host;
+  const src = (req.headers.origin || req.headers.referer || '') as string;
+  return isAllowedEventOrigin(host, src);
+}
+
 export default async function handler(req: VercelRequest, res: VercelResponse) {
+  const requestOrigin = String(req.headers.origin || '');
+  if (requestOrigin === CAPACITOR_ORIGIN) {
+    res.setHeader('Access-Control-Allow-Origin', CAPACITOR_ORIGIN);
+    res.setHeader('Vary', 'Origin');
+  }
   // Same-origin only — no permissive CORS. sendBeacon to same origin needs none.
   res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
