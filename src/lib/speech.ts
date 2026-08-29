@@ -11,11 +11,13 @@
 import { synthesizeSpeech, hasApiKey } from './openai';
 import { track } from './telemetry';
 import { unlockAudio as unlockBaseAudio } from './audioUnlock';
-import { Capacitor } from '@capacitor/core';
 
-// The native app must use generated audio from the same Cartesia-backed API as
-// the web app. Never silently substitute Apple's speechSynthesis voice there.
-const ALLOW_BROWSER_TTS_FALLBACK = !Capacitor.isNativePlatform();
+// Conversation Mode must always have an audible fallback. Generated Cartesia
+// audio remains the preferred path on web and native, but iOS can reject blob
+// playback because of autoplay/WebView state even after the API succeeds. In a
+// voice-first app, falling back to the device voice is safer than completing a
+// reply in total silence.
+const ALLOW_BROWSER_TTS_FALLBACK = true;
 
 // Monotonic counter. stopSpeaking() increments it, invalidating every in-flight
 // playback path in one atomic move — structural guarantee against overlap.

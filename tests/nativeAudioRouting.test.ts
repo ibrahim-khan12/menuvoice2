@@ -40,6 +40,16 @@ test('client API calls use the native-aware URL helper', () => {
   }
 });
 
+test('conversation speech retains an audible fallback on native', () => {
+  const source = fs.readFileSync(
+    path.resolve(import.meta.dirname, '..', 'src', 'lib', 'speech.ts'),
+    'utf8',
+  );
+  assert.match(source, /const ALLOW_BROWSER_TTS_FALLBACK = true;/);
+  assert.match(source, /await playBrowser\(text, epoch\)/);
+  assert.match(source, /await playBrowser\(sentence, myEpoch\)/);
+});
+
 test('native iOS can fall back from realtime STT to MediaRecorder', () => {
   assert.equal(canUseNativeRecorderFallback(true, true), true);
   assert.equal(canUseNativeRecorderFallback(false, true), false);
