@@ -4,6 +4,8 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { apiUrl } from '../src/lib/apiUrl.ts';
 import { hasApiKey } from '../src/lib/openai.ts';
+import { canUseNativeRecorderFallback } from '../src/lib/speechRecognition.ts';
+import { isAllowedEventOrigin } from '../api/events.ts';
 
 test('web API requests remain same-origin', () => {
   assert.equal(apiUrl('/api/tts', false), '/api/tts');
@@ -36,4 +38,18 @@ test('client API calls use the native-aware URL helper', () => {
     const source = fs.readFileSync(file, 'utf8');
     assert.doesNotMatch(source, /(?:fetch|sendBeacon)\(\s*['"]\/api\//, file);
   }
+});
+
+test('native iOS can fall back from realtime STT to MediaRecorder', () => {
+  assert.equal(canUseNativeRecorderFallback(true, true), true);
+  assert.equal(canUseNativeRecorderFallback(false, true), false);
+  assert.equal(canUseNativeRecorderFallback(true, false), false);
+});
+
+test('telemetry accepts only the exact native app origin or deployment host', () => {
+  assert.equal(isAllowedEventOrigin('app.meetmymenu.com', 'capacitor://localhost'), true);
+  assert.equal(isAllowedEventOrigin('app.meetmymenu.com', 'capacitor://localhost/'), true);
+  assert.equal(isAllowedEventOrigin('app.meetmymenu.com', 'https://app.meetmymenu.com'), true);
+  assert.equal(isAllowedEventOrigin('app.meetmymenu.com', 'https://attacker.example'), false);
+  assert.equal(isAllowedEventOrigin('app.meetmymenu.com', 'capacitor://attacker'), false);
 });

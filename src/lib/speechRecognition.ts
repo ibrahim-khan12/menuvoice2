@@ -21,8 +21,16 @@ import { track } from './telemetry';
 import { transcribeAudio } from './openai';
 import { apiUrl } from './apiUrl';
 
-const STT_PROVIDER = Capacitor.isNativePlatform() ? 'cartesia' : (import.meta.env.VITE_STT_PROVIDER ?? 'browser');
+const CONFIGURED_STT_PROVIDER = (import.meta.env as Record<string, string | undefined> | undefined)?.VITE_STT_PROVIDER;
+const STT_PROVIDER = Capacitor.isNativePlatform() ? 'cartesia' : (CONFIGURED_STT_PROVIDER ?? 'browser');
 const CARTESIA_VERSION = '2026-03-01';
+
+export function canUseNativeRecorderFallback(
+  native = Capacitor.isNativePlatform(),
+  mediaRecorderAvailable = typeof MediaRecorder !== 'undefined',
+): boolean {
+  return native && mediaRecorderAvailable;
+}
 
 // Minimal types for Web Speech API — not in all TypeScript DOM lib versions.
 interface SR {
@@ -185,7 +193,7 @@ export class SpeechManager {
           outcome: 'failure',
           metadata: { provider: 'cartesia', error: error?.message ?? String(error) },
         });
-        this.onError('I had trouble starting the microphone. Please try again.');
+        this.fallbackToNativeRecorder(run, error);
       });
       return;
     }
@@ -337,6 +345,42 @@ export class SpeechManager {
     track('speech', 'stt_turn_start', { metadata: { provider: 'native-recorder' } });
   }
 
+  private fallbackToNativeRecorder(run: number, error: unknown) {
+    if (!this.isCurrentCartesiaRun(run)) return;
+    if (!canUseNativeRecorderFallback()) {
+      this.sessionActive = false;
+      this.stopCartesia(false);
+      this.onError('I had trouble starting the microphone. Please try again.');
+      return;
+    }
+
+    // Keep this turn alive, but switch it away from realtime Cartesia. The
+    // existing MediaRecorder path submits the clip through /api/transcribe,
+    // which itself tries Cartesia and then OpenAI. This gives iOS a working
+    // microphone even when access-token or WebSocket setup is unavailable.
+    this.stopCartesia(false);
+    this.usingCartesia = false;
+    this.usingNativeRecorder = true;
+    track('speech', 'stt_fallback', {
+      metadata: { from: 'cartesia-realtime', to: 'native-recorder', error: error instanceof Error ? error.message : String(error) },
+    });
+    this.startNativeRecording(run).catch((fallbackError) => {
+      if (!this.isCurrentCartesiaRun(run)) return;
+      this.sessionActive = false;
+      this.stopNativeRecording();
+      console.warn('Native microphone fallback failed:', fallbackError);
+      track('speech', 'stt_error', {
+        outcome: 'failure',
+        metadata: { provider: 'native-recorder', error: fallbackError?.name ?? fallbackError?.message ?? String(fallbackError) },
+      });
+      this.onError(
+        fallbackError?.name === 'NotAllowedError'
+          ? 'I need microphone access to hear you. Allow microphone access in iPhone Settings, then tap Try again.'
+          : 'I had trouble starting the microphone. Please try again.',
+      );
+    });
+  }
+
   private stopNativeStream() {
     if (this.stream) {
       this.stream.getTracks().forEach((track) => track.stop());
@@ -415,6 +459,7 @@ export class SpeechManager {
     };
     this.ws.onerror = () => {
       track('speech', 'stt_error', { outcome: 'failure', metadata: { provider: 'cartesia', error: 'websocket' } });
+      this.fallbackToNativeRecorder(run, new Error('Cartesia WebSocket failed.'));
     };
     this.ws.onclose = () => {
       if (!this.isCurrentCartesiaRun(run)) return;
@@ -462,9 +507,7 @@ export class SpeechManager {
         outcome: 'failure',
         metadata: { provider: 'cartesia', error: msg.message ?? msg.title ?? 'error' },
       });
-      this.sessionActive = false;
-      this.stopCartesia(false);
-      this.onError('I had trouble hearing you. Please try again.');
+      this.fallbackToNativeRecorder(run, new Error(msg.message ?? msg.title ?? 'Cartesia realtime error.'));
     }
   }
 
