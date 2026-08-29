@@ -31,6 +31,7 @@ import { MenuScanner } from '../lib/scanner';
 import { assessPhotoQuality, type PhotoQualityIssue } from '../lib/photoQuality';
 import { earconTick, earconCapture } from '../lib/earcon';
 import { track, isImageLoggingOn } from '../lib/telemetry';
+import { apiUrl } from '../lib/apiUrl';
 
 const ANALYSIS_PHRASES = [
   'Still reading your menu, just a moment.',
@@ -526,7 +527,7 @@ export default function CaptureScreen({
       try {
         const uploads = await Promise.allSettled(
           imageBase64.map(async (b64, i) => {
-            const r = await fetch('/api/upload-image', {
+            const r = await fetch(apiUrl('/api/upload-image'), {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify({ imageBase64: b64, filename: `cap-${Date.now()}-${i}.jpg` }),

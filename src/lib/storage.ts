@@ -4,6 +4,7 @@
 
 import { UserProfile, EMPTY_PROFILE, SavedRestaurant, ParsedMenu, MenuProvenance } from '../types';
 import { track } from './telemetry';
+import { apiUrl } from './apiUrl';
 
 const PROFILE_KEY = 'menuvoice.profile.v1';
 const SAVED_KEY = 'menuvoice.savedRestaurants.v1';
@@ -113,7 +114,7 @@ function writeSyncSession(session: SyncSession | null): void {
  */
 export async function establishSyncSession(idToken: string): Promise<string | null> {
   try {
-    const res = await fetch('/api/sync?action=session', {
+    const res = await fetch(apiUrl('/api/sync?action=session'), {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ idToken }),
@@ -144,7 +145,7 @@ async function pushToCloud(profile: UserProfile, restaurants: SavedRestaurant[])
   if (!authHeader) return; // no verified session for this account — stay local-only
   try {
     const body = JSON.stringify({ profile, restaurants });
-    const res = await fetch('/api/sync', {
+    const res = await fetch(apiUrl('/api/sync'), {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', ...authHeader },
       body,
@@ -164,7 +165,7 @@ export async function loadFromCloud(email: string): Promise<{ profile: UserProfi
   const authHeader = syncAuthHeader(email);
   if (!authHeader) return null; // no verified session for this account — nothing to pull
   try {
-    const res = await fetch('/api/sync', { headers: authHeader });
+    const res = await fetch(apiUrl('/api/sync'), { headers: authHeader });
     if (res.status === 401) writeSyncSession(null);
     if (!res.ok) return null;
     const data = await res.json();
