@@ -89,7 +89,16 @@ async function audioSpeech(body: object): Promise<Blob> {
     if (!res.ok) throw new Error(await parseApiError(res));
     return res.blob();
   }
-  const res = await fetch(apiUrl('/api/tts'), {
+  // CapacitorHttp patches window.fetch so native requests bypass WebView CORS.
+  // Its native bridge is a poor fit for binary Blob responses, though, and can
+  // turn a valid MP3 into an unplayable response on iOS. Capacitor preserves the
+  // original WebKit fetch as CapacitorWebFetch; use it only for TTS audio. The
+  // /api/tts route explicitly allows the exact signed-app origin.
+  const nativeWindow = window as Window & { CapacitorWebFetch?: typeof window.fetch };
+  const fetchAudio = Capacitor.isNativePlatform() && nativeWindow.CapacitorWebFetch
+    ? nativeWindow.CapacitorWebFetch.bind(window)
+    : fetch;
+  const res = await fetchAudio(apiUrl('/api/tts'), {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(body),

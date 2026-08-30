@@ -50,6 +50,15 @@ test('conversation speech retains an audible fallback on native', () => {
   assert.match(source, /await playBrowser\(sentence, myEpoch\)/);
 });
 
+test('native TTS bypasses the Capacitor HTTP bridge for binary audio', () => {
+  const source = fs.readFileSync(
+    path.resolve(import.meta.dirname, '..', 'src', 'lib', 'openai.ts'),
+    'utf8',
+  );
+  assert.match(source, /CapacitorWebFetch/);
+  assert.match(source, /fetchAudio\(apiUrl\('\/api\/tts'\)/);
+});
+
 test('native iOS can fall back from realtime STT to MediaRecorder', () => {
   assert.equal(canUseNativeRecorderFallback(true, true), true);
   assert.equal(canUseNativeRecorderFallback(false, true), false);

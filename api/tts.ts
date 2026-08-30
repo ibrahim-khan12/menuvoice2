@@ -8,8 +8,21 @@ const CARTESIA_VERSION = '2026-03-01';
 // generation_config.speed value is honored. An explicit environment override
 // remains available for deployments that prioritize a different model.
 export const CARTESIA_TTS_MODEL_DEFAULT = 'sonic-3';
+const CAPACITOR_ORIGIN = 'capacitor://localhost';
+
+export function applyTtsCors(req: VercelRequest, res: VercelResponse): void {
+  const origin = String(req.headers.origin || '');
+  if (origin === CAPACITOR_ORIGIN) {
+    res.setHeader('Access-Control-Allow-Origin', CAPACITOR_ORIGIN);
+    res.setHeader('Vary', 'Origin');
+  }
+  res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+}
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
+  applyTtsCors(req, res);
+  if (req.method === 'OPTIONS') return res.status(204).end();
   if (req.method !== 'POST') return res.status(405).end();
   if (!(await enforceRateLimit(req, res, 'tts'))) return;
   if (process.env.CARTESIA_TTS_ENABLED === 'true') {
