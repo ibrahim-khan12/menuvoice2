@@ -2,7 +2,10 @@
 // system-browser + custom-URL-scheme pattern as nativeGoogleAuth.ts, so it
 // needs no extra native plugin. Apple requires response_mode=form_post
 // whenever an id_token is requested — the token is POSTed server-side to
-// api/apple-callback.ts, which bounces it into the app's custom scheme.
+// api/sync.ts's apple-callback action (folded into that existing function
+// rather than its own file, for the same Vercel Hobby-plan function-count
+// reason api/sync.ts's session action already is), which bounces it into
+// the app's custom scheme.
 import { Capacitor } from '@capacitor/core';
 import { Browser } from '@capacitor/browser';
 import { App, type URLOpenListenerEvent } from '@capacitor/app';
@@ -10,7 +13,7 @@ import { tokenHasNonce } from './googleNonce';
 
 export const isNativePlatform = Capacitor.isNativePlatform();
 
-const REDIRECT_PAGE = 'https://app.meetmymenu.com/api/apple-callback';
+const REDIRECT_PAGE = 'https://app.meetmymenu.com/api/sync?action=apple-callback';
 const APP_CALLBACK_PREFIX = 'com.meetmymenu.app://apple-oauth-callback';
 
 function randomNonce(): string {
