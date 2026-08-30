@@ -145,9 +145,17 @@ as the Codemagic App Store Connect integration setup:
 3. **Configure that Services ID's "Sign In with Apple" settings**:
    - Primary App ID: `com.meetmymenu.app`
    - Domains: `app.meetmymenu.com`
-   - Return URLs: `https://app.meetmymenu.com/api/apple-callback`
+   - Return URLs: `https://app.meetmymenu.com/api/sync?action=apple-callback`
      (this one endpoint handles both the web popup flow and the native
-     app's system-browser redirect, so only one URL needs registering)
+     app's system-browser redirect, so only one URL needs registering —
+     this used to be its own `api/apple-callback.ts` file/URL, but that
+     pushed the project's serverless function count over Vercel's Hobby
+     plan limit and silently kept the previous deployment live instead of
+     the one containing it, so it's now folded into `api/sync.ts`
+     alongside the session action, the same way that action already is.
+     **If a Services ID was already configured with the old
+     `/api/apple-callback` URL, update it to this one** — the old path no
+     longer exists.)
 4. **Set the environment variables** — same value in both, one for the
    client bundle, one for server-side verification:
    - Vercel: `VITE_APPLE_CLIENT_ID` and `APPLE_CLIENT_ID`, both set to
