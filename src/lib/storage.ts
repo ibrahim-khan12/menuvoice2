@@ -106,18 +106,21 @@ function writeSyncSession(session: SyncSession | null): void {
 }
 
 /**
- * Exchange a fresh Google ID token for a Meet My Menu AI sync session. Call once
- * right after Google Sign-In succeeds. Returns the server-verified email on
+ * Exchange a fresh Google or Apple ID token for a Meet My Menu AI sync session.
+ * Call once right after sign-in succeeds. Returns the server-verified email on
  * success (the authoritative identity for sync going forward), or null if the
  * exchange failed — callers should still let sign-in proceed locally in that
  * case; cloud sync just stays unavailable until the next successful exchange.
  */
-export async function establishSyncSession(idToken: string): Promise<string | null> {
+export async function establishSyncSession(
+  idToken: string,
+  provider: 'google' | 'apple' = 'google',
+): Promise<string | null> {
   try {
     const res = await fetch(apiUrl('/api/sync?action=session'), {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ idToken }),
+      body: JSON.stringify({ idToken, provider }),
     });
     if (!res.ok) return null;
     const data = await res.json();

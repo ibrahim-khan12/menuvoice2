@@ -460,6 +460,35 @@ body::before {
   flex: 0 0 22px;
 }
 
+/* Sign in with Apple, styled per Apple's Human Interface Guidelines for
+   third-party buttons: solid black, white logo and label. */
+.btn-apple {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  background: #000;
+  border-color: #000;
+  color: #fff;
+  font-weight: 700;
+}
+
+.btn-apple:hover:not(:disabled) {
+  background: #1a1a1a;
+  border-color: #1a1a1a;
+}
+
+.btn-apple:active:not(:disabled) {
+  transform: translateY(1px);
+  background: #000;
+}
+
+.apple-mark {
+  width: 19px;
+  height: 19px;
+  flex: 0 0 19px;
+}
+
 .btn-secondary {
   background: var(--surface);
   color: var(--text-primary);

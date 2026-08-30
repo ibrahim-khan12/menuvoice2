@@ -44,7 +44,7 @@
 
 <h2>Information the app collects</h2>
 <h3>Account information</h3>
-<p>Signing in with Google shares your email address and name with the app; Google verifies the identity token on the server, and the app never receives or stores your Google password. You can also use the app with a typed email address without Google Sign-In. Cloud sync is unavailable with email-only sign-in.</p>
+<p>Signing in with Google or Apple shares your email address (and, the first time, your name) with the app; Google or Apple verifies the identity token on the server, and the app never receives or stores your Google or Apple password. If you choose to hide your email with Apple's private relay, the app receives that relay address instead of your real one. You can also use the app with a typed email address without Google or Apple Sign-In. Cloud sync is unavailable with email-only sign-in.</p>
 <h3>Profile and preferences</h3>
 <p>Allergies, foods you dislike, cuisines you like, past orders, a running history of restaurants you've asked about, and accessibility settings (theme, text size, speech rate, preferred voice). These exist so the app can warn about relevant allergens and tailor recommendations &mdash; they are not shared with anyone except as described below.</p>
 <h3>Saved restaurants and menus</h3>
@@ -61,7 +61,7 @@
 <h2>How the information is used</h2>
 <ul>
 <li>To read menus aloud, answer questions about them, and warn about allergens you've told the app about.</li>
-<li>To sync your profile and saved restaurants across devices, if you're signed in with Google.</li>
+<li>To sync your profile and saved restaurants across devices, if you're signed in with Google or Apple.</li>
 <li>To understand what's working and what isn't, so the app can be improved.</li>
 </ul>
 <p>Meet My Menu does not run ads, does not use advertising trackers, and does not sell personal information.</p>
@@ -72,6 +72,7 @@
 <li><strong>OpenAI</strong> &mdash; processes menu photos, conversation questions, and voice transcription to generate the app's responses.</li>
 <li><strong>Cartesia</strong> &mdash; an alternate text-to-speech provider, used for some of the app's spoken voices.</li>
 <li><strong>Google</strong> &mdash; verifies your identity when you sign in with Google. The app only receives your verified email and name, not your Google password or account access.</li>
+<li><strong>Apple</strong> &mdash; verifies your identity when you sign in with Apple. The app only receives your verified email (or private relay address, if you choose to hide your email) and, on first sign-in, your name &mdash; never your Apple password or account access.</li>
 <li><strong>Vercel</strong> &mdash; hosts the app and its backend storage (profile/restaurant sync, usage logs, and, if enabled, saved menu photos).</li>
 </ul>
 
@@ -88,7 +89,7 @@
 
 <h2>Your choices</h2>
 <ul>
-<li>Use the app with a typed email instead of Google Sign-In when you do not want to use cloud sync.</li>
+<li>Use the app with a typed email instead of Google or Apple Sign-In when you do not want to use cloud sync.</li>
 <li>Clear your saved restaurants and profile from Settings at any time.</li>
 <li>Request a copy or deletion of your cloud-stored data by emailing <a href="mailto:2firemaster27@gmail.com">2firemaster27@gmail.com</a>.</li>
 </ul>

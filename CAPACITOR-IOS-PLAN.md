@@ -122,6 +122,48 @@ solid but deserves direct confirmation given what this app is for.
 - Submit for review. Expect real scrutiny on the accessibility claims,
   since reviewers may actually test it with VoiceOver.
 
+### Step 8b: Sign in with Apple
+
+Apple's App Review Guideline 4.8 requires offering Sign in with Apple
+whenever an app offers another third-party login (Google, here) — this
+isn't optional for approval, not just a nice-to-have. The code is in
+place (`src/lib/nativeAppleAuth.ts` for the Capacitor app, matching how
+Google Sign-In works there; `src/lib/appleAuthWeb.ts` for the web app,
+using Apple's own JS SDK; `verifyAppleIdToken` in `server/auth.ts` for
+server-side verification, mirroring `verifyGoogleIdToken`), but none of
+it works until this configuration exists in Apple's and Vercel's
+dashboards — this is Apple Developer account owner work, same category
+as the Codemagic App Store Connect integration setup:
+
+1. **Enable the capability.** Apple Developer → Certificates, Identifiers
+   & Profiles → Identifiers → `com.meetmymenu.app` → check "Sign In with
+   Apple" → Save.
+2. **Create a Services ID.** Identifiers → **+** → Services IDs. This is
+   a *separate* identifier from the app's Bundle ID — e.g.
+   `com.meetmymenu.app.web`. This becomes the `client_id` used everywhere
+   below.
+3. **Configure that Services ID's "Sign In with Apple" settings**:
+   - Primary App ID: `com.meetmymenu.app`
+   - Domains: `app.meetmymenu.com`
+   - Return URLs: `https://app.meetmymenu.com/api/apple-callback`
+     (this one endpoint handles both the web popup flow and the native
+     app's system-browser redirect, so only one URL needs registering)
+4. **Set the environment variables** — same value in both, one for the
+   client bundle, one for server-side verification:
+   - Vercel: `VITE_APPLE_CLIENT_ID` and `APPLE_CLIENT_ID`, both set to
+     the Services ID from step 2 (e.g. `com.meetmymenu.app.web`)
+   - Codemagic: add `VITE_APPLE_CLIENT_ID` to the `ios-google-oauth`
+     variable group (or a new group) so the iOS build picks it up the
+     same way `VITE_GOOGLE_CLIENT_ID` already does
+5. **Redeploy** the web app (Vercel) and run a new Codemagic build once
+   the variables are set — the "Sign in with Apple" button only renders
+   when `VITE_APPLE_CLIENT_ID` is present, so it stays invisible rather
+   than broken until this is done.
+
+No private key or client secret is needed for any of this — the app
+only verifies ID tokens against Apple's public keys, the same way it
+already does for Google, so there's nothing to generate or rotate.
+
 ### Step 9: After launch
 
 - App Store Optimization matters more here than for a typical app.
