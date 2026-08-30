@@ -14,8 +14,9 @@ import { SignJWT, generateKeyPair } from 'jose';
 
 process.env.SESSION_SECRET = 'test-session-secret-not-for-production-use-only';
 process.env.GOOGLE_CLIENT_ID = 'test-client-id.apps.googleusercontent.com';
+process.env.APPLE_CLIENT_ID = 'com.meetmymenu.app.web';
 
-const { verifyGoogleIdToken, createSessionToken, verifySessionToken, bearerToken } =
+const { verifyGoogleIdToken, verifyAppleIdToken, createSessionToken, verifySessionToken, bearerToken } =
   await import('../server/auth.ts');
 
 const { publicKey, privateKey } = await generateKeyPair('RS256');
@@ -93,6 +94,82 @@ test('rejects a token signed by a DIFFERENT key (forged/tampered)', async () => 
 test('rejects garbage input without throwing', async () => {
   assert.equal(await verifyGoogleIdToken('not-a-jwt', publicKey), null);
   assert.equal(await verifyGoogleIdToken('', publicKey), null);
+});
+
+// ── verifyAppleIdToken ────────────────────────────────────────────────────
+
+async function signAppleLikeToken(claims: Record<string, unknown>, opts: { expSec?: number } = {}) {
+  return new SignJWT({ email_verified: true, ...claims })
+    .setProtectedHeader({ alg: 'RS256' })
+    .setIssuedAt()
+    .setExpirationTime(opts.expSec ? Math.floor(Date.now() / 1000) + opts.expSec : '1h')
+    .sign(privateKey);
+}
+
+test('accepts a validly signed, correctly audienced, verified-email Apple token', async () => {
+  const token = await signAppleLikeToken({
+    email: 'Diner@Example.com',
+    iss: 'https://appleid.apple.com',
+    aud: 'com.meetmymenu.app.web',
+  });
+  const result = await verifyAppleIdToken(token, publicKey);
+  assert.deepEqual(result, { email: 'diner@example.com' }, 'email is lowercased/trimmed');
+});
+
+test('accepts Apple sending email_verified as the string "true"', async () => {
+  const token = await signAppleLikeToken({
+    email: 'diner@example.com',
+    email_verified: 'true',
+    iss: 'https://appleid.apple.com',
+    aud: 'com.meetmymenu.app.web',
+  });
+  assert.deepEqual(await verifyAppleIdToken(token, publicKey), { email: 'diner@example.com' });
+});
+
+test('rejects Apple sending email_verified as the string "false"', async () => {
+  const token = await signAppleLikeToken({
+    email: 'diner@example.com',
+    email_verified: 'false',
+    iss: 'https://appleid.apple.com',
+    aud: 'com.meetmymenu.app.web',
+  });
+  assert.equal(await verifyAppleIdToken(token, publicKey), null);
+});
+
+test('rejects an Apple token for the wrong audience (a different app)', async () => {
+  const token = await signAppleLikeToken({
+    email: 'diner@example.com',
+    iss: 'https://appleid.apple.com',
+    aud: 'com.someone-else.app',
+  });
+  assert.equal(await verifyAppleIdToken(token, publicKey), null);
+});
+
+test('rejects an Apple token from the wrong issuer', async () => {
+  const token = await signAppleLikeToken({
+    email: 'diner@example.com',
+    iss: 'https://not-apple.example.com',
+    aud: 'com.meetmymenu.app.web',
+  });
+  assert.equal(await verifyAppleIdToken(token, publicKey), null);
+});
+
+test('rejects an Apple token signed by a DIFFERENT key (forged/tampered)', async () => {
+  const { privateKey: attackerKey } = await generateKeyPair('RS256');
+  const forged = await new SignJWT({
+    email: 'diner@example.com', email_verified: true,
+    iss: 'https://appleid.apple.com', aud: 'com.meetmymenu.app.web',
+  })
+    .setProtectedHeader({ alg: 'RS256' })
+    .setIssuedAt()
+    .setExpirationTime('1h')
+    .sign(attackerKey);
+  assert.equal(await verifyAppleIdToken(forged, publicKey), null);
+});
+
+test('rejects garbage input to verifyAppleIdToken without throwing', async () => {
+  assert.equal(await verifyAppleIdToken('not-a-jwt', publicKey), null);
+  assert.equal(await verifyAppleIdToken('', publicKey), null);
 });
 
 // ── Meet My Menu AI's own session tokens ──────────────────────────────────────

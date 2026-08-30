@@ -1,7 +1,7 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { kv } from '@vercel/kv';
 import { createClient } from '@vercel/postgres';
-import { verifyGoogleIdToken, createSessionToken, verifySessionToken, bearerToken } from '../server/auth.js';
+import { verifyGoogleIdToken, verifyAppleIdToken, createSessionToken, verifySessionToken, bearerToken } from '../server/auth.js';
 
 // GET  /api/sync   — fetch stored data for the authenticated caller
 // POST /api/sync   — save data { profile, restaurants } for the authenticated caller
@@ -134,11 +134,12 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   // Keep session creation in this existing function so the Hobby deployment
   // stays within Vercel's function limit. It remains a distinct API action.
   if (req.method === 'POST' && req.query.action === 'session') {
-    const { idToken } = (req.body ?? {}) as { idToken?: string };
+    const { idToken, provider } = (req.body ?? {}) as { idToken?: string; provider?: string };
     if (!idToken || typeof idToken !== 'string') {
       return res.status(400).json({ error: 'idToken required' });
     }
-    const identity = await verifyGoogleIdToken(idToken);
+    const identity =
+      provider === 'apple' ? await verifyAppleIdToken(idToken) : await verifyGoogleIdToken(idToken);
     if (!identity) {
       return res.status(401).json({ error: 'Could not verify that sign-in. Please try signing in again.' });
     }
