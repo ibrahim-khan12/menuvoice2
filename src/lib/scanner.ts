@@ -148,58 +148,64 @@ const GLARE_CEILING = 0.34;    // a third of the frame blown out
 const SHARP_FLOOR = 22;        // beyond this nothing survives OCR
 const FORCE_MOTION_MAX = 26;   // still refuse a frame taken mid-swing
 
-const COUNTDOWN: Record<number, string> = {
+export const COUNTDOWN: Record<number, string> = {
   1: 'Hold still. Three.',
   2: 'Two.',
   3: 'One.',
 };
 
 // [first message, escalation with a concrete fix]
-const STAGE_MSGS: Record<string, [string, string]> = {
+//
+// These play over and over while someone holds a phone above a table, so every
+// one is kept to a short instruction they can act on. One idea per message,
+// plain words, no explaining. A long sentence here is a sentence the user is
+// still hearing when the thing it describes has already changed.
+export const STAGE_MSGS: Record<string, [string, string]> = {
   searching: [
-    'Point the camera at the menu. Hold the phone flat, about a foot above it.',
-    "I don't see menu text yet. Slide the phone slowly over the table until I find it, or tap Take photo to capture now.",
+    'Point the camera at the menu, about a foot above it.',
+    "I don't see it yet. Move the phone slowly over the table.",
   ],
   dark: [
-    "It's too dark to read. Move toward a window or a lamp.",
-    'Still dark. Tilt the menu toward the nearest light, or ask for a phone flashlight. You can also tap Take photo and I will try anyway.',
+    'Too dark. Move toward a light.',
+    'Still dark. Tilt the menu toward a light.',
   ],
   glare: [
-    'There is a shiny glare on the menu. Tilt the phone slightly to one side.',
-    'Still seeing glare. Move the menu away from the light above it, or stand so your shadow covers the shiny spot.',
+    'There is a shine on the menu. Tilt the phone a little.',
+    'Still shiny. Move the menu out from under the light.',
   ],
   blur: [
-    'The picture is blurry. Lift the phone a little higher, about a foot above the menu.',
-    'Still blurry. Rest your elbows on the table to keep the phone steady, and hold it a bit further from the page.',
+    'Blurry. Lift the phone a little higher.',
+    'Still blurry. Rest your elbows on the table.',
   ],
   tooClose: [
-    "You're very close to the menu. Move the phone back a bit so the whole page fits in the frame.",
-    "Still too close. The menu doesn't fully fit. Hold the phone about a foot above the page.",
+    'Too close. Move the phone back.',
+    'Still too close. Hold it about a foot above the page.',
   ],
   tooFar: [
-    'The menu looks small in the frame. Move the phone a little closer.',
-    'Still far away. Bring the phone closer until the menu fills most of the frame.',
+    'Too far. Move the phone closer.',
+    'Still too far. Bring it closer until the menu fills the screen.',
   ],
   skewed: [
-    'The menu looks tilted. Hold the phone flat and level with the page.',
-    'Still tilted, almost sideways. Line up the top edge of the phone with the top edge of the menu.',
+    'The menu looks crooked. Hold the phone flat.',
+    'Still crooked. Line the phone up with the top of the menu.',
   ],
   moving: [
-    'I can see the menu. Now hold still.',
-    'Almost there. Rest your elbows on the table, take a breath, and hold the phone still. Or tap Take photo whenever you are ready.',
+    'I can see it. Hold still.',
+    'Almost. Rest your elbows on the table and hold still.',
   ],
 };
 
-// Rotation advice. Phrased so it is followable without seeing the screen: name
-// the direction to turn, say what it achieves, and make clear it is optional —
-// auto capture keeps working either way, so nobody is stuck waiting on it.
-const ROTATE_MSGS: Record<'toLandscape' | 'toPortrait', string> = {
-  toLandscape:
-    'This menu is wider than it is tall. Turning the phone sideways, so its long edge runs left to right, will fit more of it. You can also keep going as you are.',
-  toPortrait:
-    'This menu is taller than it is wide. Holding the phone upright will fit more of it. You can also keep going as you are.',
+// Rotation advice. Names the direction to turn and why, in one short line, and
+// makes clear it is optional — auto capture works either way.
+export const ROTATE_MSGS: Record<'toLandscape' | 'toPortrait', string> = {
+  toLandscape: 'This menu is wide. Turn the phone sideways to fit more. Or keep going.',
+  toPortrait: 'This menu is tall. Hold the phone upright to fit more. Or keep going.',
 };
 const ROTATE_HINT_MS = 12000; // don't repeat the same rotation advice sooner
+
+// Said once when the quality bar drops, so the shutter firing on an imperfect
+// frame does not contradict the advice the user just heard.
+export const RELAX_NOTICE = 'Close enough. I will take it shortly. Hold still.';
 
 export interface FrameMetrics {
   luminance: number;
@@ -529,7 +535,7 @@ export class MenuScanner {
         ? 'Capturing now.'
         : reason === 'best_shot'
           ? 'Good enough. Taking the photo now.'
-          : 'Taking the photo now with what I can see. I will tell you if it needs another try.'
+          : 'Taking it now. I will tell you if it needs another try.'
     );
     this.cb?.onProgress?.('steadying', STEADY_TICKS, STEADY_TICKS);
     this.cb?.onCapture();
@@ -580,7 +586,7 @@ export class MenuScanner {
   private announceRelaxOnce() {
     if (this.relaxAnnounced) return;
     this.relaxAnnounced = true;
-    this.emit('This is close enough to read. I will take the photo myself in a moment — keep the phone as still as you can.');
+    this.emit(RELAX_NOTICE);
   }
 
   private tick() {

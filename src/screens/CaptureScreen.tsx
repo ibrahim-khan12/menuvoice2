@@ -30,8 +30,18 @@ import { saveRestaurant } from '../lib/storage';
 import { MenuScanner } from '../lib/scanner';
 import { assessPhotoQuality, type PhotoQualityIssue } from '../lib/photoQuality';
 import { earconTick, earconCapture } from '../lib/earcon';
+import { PacedAnnouncer } from '../lib/announcer';
 import { track, isImageLoggingOn } from '../lib/telemetry';
 import { apiUrl } from '../lib/apiUrl';
+
+// Where the camera starts when it has a real zoom range to work with.
+//
+// This was 0.5x, chosen to fit more of the page in frame without backing away.
+// On a real table that backfired: people hold the phone well above the menu,
+// and at 0.5x the text lands too small for the model to read. 0.8x still takes
+// in a whole page from a comfortable height while keeping the text large
+// enough. Zoom out is one tap away for anything bigger.
+const DEFAULT_ZOOM = 0.8;
 
 const ANALYSIS_PHRASES = [
   'Still reading your menu, just a moment.',
@@ -98,8 +108,18 @@ export default function CaptureScreen({
 
   const [photos, setPhotosState] = useState<CapturedPhoto[]>([]);
   const [confirmAnalyzeWithIssues, setConfirmAnalyzeWithIssues] = useState(false);
-  const [status, setStatus] = useState('');
-  const [coachStatus, setCoachStatus] = useState('');
+  // ONE live region, paced. Two regions updating independently meant a screen
+  // reader was constantly cut off mid-sentence — including by the message that
+  // matters most, "photo taken, turn the page", which lands exactly when
+  // coaching resumes. setStatus/setCoachStatus keep their old call sites but
+  // now feed a queue that lets each message finish.
+  //   status      = something happened, must not be missed  -> urgent
+  //   coachStatus = live guidance, superseded freely        -> normal
+  const [announcement, setAnnouncement] = useState('');
+  const announcerRef = useRef<PacedAnnouncer | null>(null);
+  if (!announcerRef.current) announcerRef.current = new PacedAnnouncer(setAnnouncement);
+  const setStatus = (text: string) => announcerRef.current?.announce(text, 'urgent');
+  const setCoachStatus = (text: string) => announcerRef.current?.announce(text, 'normal');
   const [camError, setCamError] = useState('');
 
   const sayGuidance = (message: string) => {
@@ -123,6 +143,16 @@ export default function CaptureScreen({
     setPhotosState(next);
   };
 
+  // Promote the next queued message once the current one has had time to be
+  // read. 250ms is well under the shortest hold, so nothing waits on the timer.
+  useEffect(() => {
+    const id = setInterval(() => announcerRef.current?.pump(), 250);
+    return () => {
+      clearInterval(id);
+      announcerRef.current?.reset();
+    };
+  }, []);
+
   // Start / stop camera.
   useEffect(() => {
     let cancelled = false;
@@ -137,12 +167,11 @@ export default function CaptureScreen({
             setPreviewAspect(`${video.videoWidth} / ${video.videoHeight}`);
           }
           const range = getZoomRange(s);
-          // Default to 0.5x (a wider view fits more of the menu in frame
-          // without backing away) when the device's native zoom range
-          // actually supports it; otherwise clamp to whatever the hardware
-          // allows. Software/CSS zoom (non-native) can never go below 1 —
-          // there is no way to see more than the sensor's native capture.
-          const initialZoom = range.native ? Math.min(range.max, Math.max(range.min, 0.5)) : 1;
+          // Start at DEFAULT_ZOOM when the device's native zoom range supports
+          // it, otherwise clamp to whatever the hardware allows. Software/CSS
+          // zoom (non-native) can never go below 1 — there is no way to see
+          // more than the sensor's native capture.
+          const initialZoom = range.native ? Math.min(range.max, Math.max(range.min, DEFAULT_ZOOM)) : 1;
           if (range.native) await setCameraZoom(s, initialZoom);
           const initialRange = { ...range, value: initialZoom };
           zoomRangeRef.current = initialRange;
@@ -156,7 +185,7 @@ export default function CaptureScreen({
         }
       } catch {
         const msg =
-          'Camera unavailable. On iPhone, open this site over HTTPS and allow camera access. You can still upload photos using the Upload from Library button.';
+          'No camera. On iPhone, allow camera access for this site. You can also use Upload photos.';
         setCamError(msg);
         track('capture', 'camera_start', { outcome: 'failure', metadata: { error: msg } });
         track('error', 'camera', { metadata: { error: msg } });
@@ -299,8 +328,8 @@ export default function CaptureScreen({
           // this only adds the manual button as a second option.
           track('capture', 'scanner_struggle', { metadata: { fallback: 'manual_offered' } });
           setCoachStatus(
-            'I still cannot see a menu. Check the camera is not covered and is pointing at the page. ' +
-            'I am still watching and will take the photo myself as soon as I can see it — or tap "Take photo" whenever you like.'
+            'I still cannot see a menu. Check nothing is covering the camera. ' +
+            'I am still looking and will take the photo when I see it. You can also tap Take photo.'
           );
           sayGuidance('I cannot see a menu yet. Point the camera at the page. I am still watching.');
         },
@@ -341,7 +370,7 @@ export default function CaptureScreen({
       },
     });
     if (!quality.ok) {
-      const msg = `Photo ${index + 1}. ${quality.issues.map((i) => i.message).join(' ')} Consider retaking it, or tap Read menu to continue.`;
+      const msg = `Photo ${index + 1}. ${quality.issues.map((i) => i.message).join(' ')} Tap Retake last photo to do it again, or Read menu to go on.`;
       setStatus(msg);
       sayGuidance(msg);
     }
@@ -358,9 +387,10 @@ export default function CaptureScreen({
     setPhotos((prev) => {
       const next = [...prev, { id, imageBase64: b64, issues: [], checkingQuality: true }];
       const count = next.length;
-      const msg = viaAuto
-        ? `Got it, photo ${count}. Checking quality. Line up the next page, or tap Read menu.`
-        : `Photo ${count} captured. Checking quality. Take another, or tap Read menu.`;
+      // "Turn to the next page" is the whole point of this message: without it
+      // people do not know the app is ready for another, and stand there
+      // waiting. Urgent, so it is never cut off by resuming coaching.
+      const msg = `Photo ${count} taken. Turn to the next page, or tap Read menu.`;
       setStatus(msg);
       sayGuidance(msg);
       track('capture', 'photo_added', {
@@ -477,9 +507,11 @@ export default function CaptureScreen({
         });
       }
       if (flaggedNumbers.length) {
+        // Name the control: a vague suggestion to retake is not something a
+        // blind user can act on, with no way to guess which button does it.
         const m = flaggedNumbers.length === 1
-          ? `Photo ${flaggedNumbers[0]} may have quality issues. Consider retaking it.`
-          : `Photos ${flaggedNumbers.join(', ')} may have quality issues. Consider retaking them.`;
+          ? `Photo ${flaggedNumbers[0]} may be hard to read. Tap Retake last photo to do it again.`
+          : `Photos ${flaggedNumbers.join(', ')} may be hard to read. Tap Retake last photo to redo the most recent one.`;
         setStatus(m);
       }
     } else {
@@ -578,7 +610,10 @@ export default function CaptureScreen({
         durationMs: Date.now() - t0,
         metadata: { error: String(e?.message) },
       });
-      const errMsg = friendlyError(e, 'I could not read the menu. Try retaking the photos with more light.');
+      const errMsg = friendlyError(
+        e,
+        'I could not read the menu. Tap Retake last photo, add more light, and try again.',
+      );
       setStatus(errMsg);
       setAnalyzing(false);
       analyzingRef.current = false;
@@ -586,7 +621,7 @@ export default function CaptureScreen({
   };
 
   return (
-    <Screen label="Hold your phone flat over the menu. I'll tell you how to line it up.">
+    <Screen label="Hold the phone flat over the menu. I will guide you.">
       <div className="row" style={{ alignItems: 'center', justifyContent: 'space-between' }}>
         <Title>Capture menu</Title>
         <div
@@ -597,6 +632,22 @@ export default function CaptureScreen({
           <strong style={{ fontSize: 22 }}>{photos.length} photo{photos.length === 1 ? '' : 's'}</strong>
         </div>
       </div>
+
+      {/* Read menu sits at the TOP, directly under the heading.
+          It is the step that actually starts the reading, and buried at the
+          bottom of a long control stack a VoiceOver user had to swipe past the
+          preview, the zoom pair, the shutter and the upload button to reach it.
+          Its label carries the photo count, so it is also the running progress
+          report. */}
+      {photos.length > 0 && (
+        <PrimaryButton
+          label={analyzing ? 'Reading...' : `Read menu (${photos.length})`}
+          hint="Read the menu from the photos you have taken"
+          onClick={analyze}
+          disabled={analyzing}
+          style={{ minHeight: 80 }}
+        />
+      )}
 
       <button
         onClick={() => setAutoMode((v) => !v)}
@@ -665,14 +716,11 @@ export default function CaptureScreen({
       {camError ? (
         <p role="alert" className="body" style={{ color: 'var(--danger)' }}>{camError}</p>
       ) : null}
-      {/* Scanner coaching — always announced; nothing on this screen speaks,
-          so the screen reader is the only voice and there is no double-talk. */}
-      <p role="status" className="body" aria-live="polite" style={{ textAlign: 'center', minHeight: 24 }}>
-        {coachStatus}
-      </p>
-      {/* Analysis and photo-count feedback — always announced */}
-      <p role="status" className="body" aria-live="polite" style={{ textAlign: 'center', minHeight: 24 }}>
-        {status}
+      {/* One paced live region for coaching, photo confirmations and analysis.
+          Nothing on this screen speaks, so the screen reader is the only voice
+          — and a single region is the only way to stop it interrupting itself. */}
+      <p role="status" className="body" aria-live="polite" style={{ textAlign: 'center', minHeight: 48 }}>
+        {announcement}
       </p>
 
       <div className="col capture-controls">
@@ -735,14 +783,6 @@ export default function CaptureScreen({
             </svg>
             <span>Upload photos</span>
           </button>
-          {photos.length > 0 && (
-            <PrimaryButton
-              label={analyzing ? 'Reading...' : `Read menu (${photos.length})`}
-              hint="Read the menu from these photos"
-              onClick={analyze}
-              disabled={analyzing}
-            />
-          )}
         </div>
 
         <SecondaryButton label="Cancel" onClick={goBack} disabled={analyzing} />

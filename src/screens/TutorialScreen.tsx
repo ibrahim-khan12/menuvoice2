@@ -8,55 +8,70 @@ import { Screen, Title, Body, PrimaryButton, SecondaryButton } from '../componen
 import { ScreenProps } from '../nav';
 import { track } from '../lib/telemetry';
 
-interface Step {
+export interface Step {
   title: string;
   body: string;
 }
 
-// First-run tutorial: three short steps, one sentence each, covering only
-// what a new user needs before their first menu — how to get it, how to
-// interact with it, and the one safety reminder that matters most. Pause
-// Voice, appearance settings, and everything else lives in the fuller "How
-// Meet My Menu AI works" screen (STEPS below), reachable anytime from Settings.
-const FIRST_RUN_STEPS: Step[] = [
+// First-run tutorial: the few things a new user needs before their first menu.
+// Every line is short and plain — this is read aloud by a screen reader, and a
+// long sentence is one the listener is still hearing after they have moved on.
+//
+// The "Read menu" step is here because taking photos does NOT start the
+// reading. Nothing happens until that button is activated, and a blind user
+// who does not know that is left holding a phone full of photos wondering why
+// the app has gone quiet.
+export const FIRST_RUN_STEPS: Step[] = [
   {
-    title: 'Open a menu',
-    body: 'Scanning your own copy is usually the most accurate — you can also search online or open a saved menu.',
+    title: 'Get the menu',
+    body: 'Scan it with your camera, search online, or open a saved one.',
   },
   {
-    title: 'Ask a question',
-    body: 'Talk with Meet My Menu AI by voice, or switch to Browse Menu to read silently with your screen reader.',
+    title: 'Then tap Read menu',
+    body: 'Photos are not read until you tap Read menu. With Voice Control, say "Tap Read menu."',
   },
   {
-    title: 'Check with staff',
-    body: 'Add your allergies in Settings — risky dishes get a warning before anything else, and you should always confirm with staff.',
+    title: 'Talk or browse',
+    body: 'Talk with me, or switch to Browse Menu and read with your screen reader.',
+  },
+  {
+    title: 'Allergy safety',
+    body: 'Add allergies in Settings. Risky dishes get a warning first. Always check with staff.',
   },
 ];
 
-const STEPS: Step[] = [
+export const STEPS: Step[] = [
   {
-    title: 'Open a menu',
-    body: 'Scanning your own copy is usually the most accurate. You can also search for one online or open a saved menu. Demo Menu is for practice.',
+    title: 'Get a menu',
+    body: 'Scan it with your camera, search online, or open a saved one. Demo Menu is for practice.',
   },
   {
-    title: 'Ask a question',
-    body: 'When a menu opens, the mic is on. Ask anything, like "What is in the carbonara?" Tap the big button to talk.',
+    title: 'Take your photos',
+    body: 'I take them for you when the menu is lined up. You can also tap Take photo.',
   },
   {
-    title: 'Check with staff',
-    body: 'Browse Menu is silent. Read category by category with your screen reader.',
+    title: 'Then tap Read menu',
+    body: 'Photos are not read until you tap Read menu. With Voice Control, say "Tap Read menu."',
+  },
+  {
+    title: 'Talk with me',
+    body: 'When a menu opens, the mic is on. Ask things like "What is in the carbonara?"',
+  },
+  {
+    title: 'Browse quietly',
+    body: 'Browse Menu is silent. Read it with your screen reader.',
   },
   {
     title: 'Allergy alerts',
-    body: 'Add allergies in Settings. Risky dishes get an alert, read first. Nothing is hidden. Always confirm with staff.',
+    body: 'Add allergies in Settings. Risky dishes get an alert first. Always check with staff.',
   },
   {
     title: 'Pause anytime',
-    body: 'Pause Voice stops all talking and listening. Resume Voice picks up where you left off.',
+    body: 'Pause Voice stops all talking and listening. Resume Voice brings it back.',
   },
   {
     title: 'Make it comfortable',
-    body: 'Set text size, color scheme, and talking speed in Settings.',
+    body: 'Set text size, colors, and talking speed in Settings.',
   },
 ];
 
@@ -74,12 +89,7 @@ export default function TutorialScreen({
     }
   }, [firstRun]);
 
-  const steps = (firstRun ? FIRST_RUN_STEPS : STEPS).slice(0, 3);
-  const shortDirections = [
-    'Scan it, search for it, or open a saved menu.',
-    'Ask about dishes or allergies.',
-    'Always confirm ingredients.',
-  ];
+  const steps = firstRun ? FIRST_RUN_STEPS : STEPS;
 
   return (
     <Screen>
@@ -92,7 +102,7 @@ export default function TutorialScreen({
             <span className="tutorial-step__num" aria-hidden="true">{i + 1}</span>
             <div className="tutorial-step__body">
               <h2 className="tutorial-step__title">{step.title}</h2>
-              <p className="tutorial-step__text">{shortDirections[i]}</p>
+              <p className="tutorial-step__text">{step.body}</p>
             </div>
           </li>
         ))}
