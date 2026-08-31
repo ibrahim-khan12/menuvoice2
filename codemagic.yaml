@@ -19,10 +19,11 @@ workflows:
       - name: Build the web app
         script: npm run build
 
-      - name: Add and sync the iOS platform
+      - name: Add, brand, and sync the iOS platform
         script: |
           set -e
           npx cap add ios
+          npx @capacitor/assets generate --ios
           npx cap sync ios
 
       - name: Add required Info.plist entries
