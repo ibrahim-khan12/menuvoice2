@@ -15,6 +15,9 @@
       "permanent": true
     }
   ],
+  "rewrites": [
+    { "source": "/privacy", "destination": "/privacy/index.html" }
+  ],
   "functions": {
     "api/chat.ts": { "maxDuration": 60 },
     "api/scrape.ts": { "maxDuration": 30 },
