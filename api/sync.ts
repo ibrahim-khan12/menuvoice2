@@ -140,8 +140,13 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   // is folded in: a standalone file for this pushed the project over
   // Vercel's function limit, which silently kept the previous deployment
   // live instead of the one containing this endpoint.
-  if (req.method === 'POST' && req.query.action === 'apple-callback') {
-    const body = (req.body ?? {}) as { id_token?: string; state?: string; error?: string };
+  const appleBody = (req.body ?? {}) as { id_token?: string; state?: string; error?: string };
+  const isAppleCallback =
+    req.method === 'POST' &&
+    req.query.action !== 'session' &&
+    (typeof appleBody.id_token === 'string' || typeof appleBody.error === 'string');
+  if (isAppleCallback) {
+    const body = appleBody;
     const params = new URLSearchParams();
     if (body.id_token) params.set('id_token', body.id_token);
     if (body.state) params.set('state', body.state);

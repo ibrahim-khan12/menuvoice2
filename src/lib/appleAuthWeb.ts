@@ -3,7 +3,7 @@
 // form_post exchange internally and hands back the ID token directly, so
 // this doesn't need the server relay the native flow uses.
 const SDK_URL = 'https://appleid.cdn-apple.com/appleauth/static/jsapi/appleid/1/en_US/appleid.auth.js';
-const REDIRECT_URI = 'https://app.meetmymenu.com/api/sync?action=apple-callback';
+const REDIRECT_URI = 'https://app.meetmymenu.com/api/sync';
 
 interface AppleAuthSuccess {
   authorization: { id_token: string; code?: string; state?: string };

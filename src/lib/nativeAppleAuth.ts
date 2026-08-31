@@ -13,7 +13,7 @@ import { tokenHasNonce } from './googleNonce';
 
 export const isNativePlatform = Capacitor.isNativePlatform();
 
-const REDIRECT_PAGE = 'https://app.meetmymenu.com/api/sync?action=apple-callback';
+const REDIRECT_PAGE = 'https://app.meetmymenu.com/api/sync';
 const APP_CALLBACK_PREFIX = 'com.meetmymenu.app://apple-oauth-callback';
 
 function randomNonce(): string {

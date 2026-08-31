@@ -145,7 +145,7 @@ as the Codemagic App Store Connect integration setup:
 3. **Configure that Services ID's "Sign In with Apple" settings**:
    - Primary App ID: `com.meetmymenu.app`
    - Domains: `app.meetmymenu.com`
-   - Return URLs: `https://app.meetmymenu.com/api/sync?action=apple-callback`
+   - Return URLs: `https://app.meetmymenu.com/api/sync`
      (this one endpoint handles both the web popup flow and the native
      app's system-browser redirect, so only one URL needs registering —
      this used to be its own `api/apple-callback.ts` file/URL, but that
