@@ -6,6 +6,12 @@
       "permanent": true
     }
   ],
+  "rewrites": [
+    {
+      "source": "/privacy",
+      "destination": "/privacy.html"
+    }
+  ],
   "functions": {
     "api/activity.js": { "maxDuration": 10 },
     "api/waitlist.js": { "maxDuration": 10 }
