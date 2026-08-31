@@ -10,8 +10,7 @@ import { useEffect, useRef, useState } from 'react';
 import { Screen, Title, PrimaryButton, SecondaryButton } from '../components';
 import { ScreenProps, Route } from '../nav';
 import { ParsedMenu } from '../types';
-import { speak, stopSpeaking } from '../lib/speech';
-import { usePause } from '../state/PauseContext';
+import { speak } from '../lib/speech';
 import {
   startCamera,
   stopCamera,
@@ -91,7 +90,6 @@ export default function CaptureScreen({
   route,
 }: ScreenProps & { route: Extract<Route, { name: 'capture' }> }) {
   const appendTo = route.appendTo;
-  const { paused, registerStopListening } = usePause();
   const videoRef = useRef<HTMLVideoElement>(null);
   const fileRef = useRef<HTMLInputElement>(null);
   const streamRef = useRef<MediaStream | null>(null);
@@ -123,7 +121,7 @@ export default function CaptureScreen({
   const [camError, setCamError] = useState('');
 
   const sayGuidance = (message: string) => {
-    if (paused || !message) return;
+    if (!message) return;
     const last = lastSpokenGuidanceRef.current;
     const now = Date.now();
     if (last.text === message || now - last.at < 1800) return;
@@ -223,33 +221,12 @@ export default function CaptureScreen({
     return () => video.removeEventListener('resize', onResize);
   }, []);
 
-  // Pause Voice stops the auto-capture scanner here too. pause() calls this
-  // handler synchronously, so the scanner stops the moment the button is
-  // pressed — before any React re-render. The paused-gated effects below then
-  // keep it stopped until Resume Voice.
-  useEffect(() => {
-    return registerStopListening(() => {
-      autoRef.current?.stop();
-      stopSpeaking();
-      if (reassureIdRef.current) {
-        clearInterval(reassureIdRef.current);
-        reassureIdRef.current = null;
-      }
-    });
-  }, [registerStopListening]);
-
-  // While paused, make sure nothing restarts and surface the paused state.
-  useEffect(() => {
-    if (!paused) return;
-    autoRef.current?.stop();
-    stopSpeaking();
-    setStatus('Paused. Tap Resume Voice to continue capture guidance.');
-    setCoachStatus('');
-  }, [paused]);
+  // Pause Voice is a Conversation-screen mute. Auto-capture guidance must
+  // remain audible even when that state carries over to this screen.
 
   // Periodic reassurance while analysis runs.
   useEffect(() => {
-    if (!analyzing || paused) {
+    if (!analyzing) {
       if (reassureIdRef.current) {
         clearInterval(reassureIdRef.current);
         reassureIdRef.current = null;
@@ -265,11 +242,11 @@ export default function CaptureScreen({
     }, 5000);
     reassureIdRef.current = id;
     return () => clearInterval(id);
-  }, [analyzing, paused]);
+  }, [analyzing]);
 
   // Run / stop the auto-capture controller.
   useEffect(() => {
-    const active = autoMode && cameraReady && !analyzing && !camError && !paused;
+    const active = autoMode && cameraReady && !analyzing && !camError;
     if (!active) {
       autoRef.current?.stop();
       return;
@@ -350,7 +327,7 @@ export default function CaptureScreen({
       autoRef.current?.stop();
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [autoMode, cameraReady, analyzing, camError, paused]);
+  }, [autoMode, cameraReady, analyzing, camError]);
 
   const finishPhotoQuality = (id: number, quality: { ok: boolean; issues: PhotoQualityIssue[] }) => {
     const index = photosRef.current.findIndex((photo) => photo.id === id);
