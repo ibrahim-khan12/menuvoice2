@@ -4,6 +4,11 @@
   "framework": "vite",
   "redirects": [
     {
+      "source": "/website/privacy.html",
+      "destination": "/privacy",
+      "permanent": true
+    },
+    {
       "source": "/:path*",
       "has": [
         {

@@ -1,6 +1,16 @@
 {
   "redirects": [
     {
+      "source": "/privacy",
+      "destination": "https://app.meetmymenu.com/privacy",
+      "permanent": true
+    },
+    {
+      "source": "/privacy.html",
+      "destination": "https://app.meetmymenu.com/privacy",
+      "permanent": true
+    },
+    {
       "source": "/index.html",
       "destination": "/",
       "permanent": true
