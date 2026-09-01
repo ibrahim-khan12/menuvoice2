@@ -87,15 +87,26 @@ workflows:
       # above worked — this is the only way to get real proof, since a
       # green build here doesn't mean the keys made it into the binary
       # (that's exactly how the previous, silently-ineffective fix looked
-      # too).
+      # too). CFBundleURLTypes and ITSAppUsesNonExemptEncryption go in the
+      # same unverified way (plutil-inserted into the pre-generation source
+      # Info.plist, not a build setting) — they'd evidently been surviving
+      # (both Google and Apple sign-in have worked in production), but
+      # nothing here was catching it if that ever silently regressed, and
+      # camera/mic strings looked fine right up until they didn't.
       - name: Verify permission strings made it into the built app
         script: |
           set -e
           cd build/ios/ipa
           unzip -o -q App.ipa -d _inspect
-          echo "--- Final Info.plist: camera/mic/URL keys ---"
-          plutil -extract NSCameraUsageDescription raw _inspect/Payload/*.app/Info.plist
-          plutil -extract NSMicrophoneUsageDescription raw _inspect/Payload/*.app/Info.plist
+          PLIST="$(echo _inspect/Payload/*.app/Info.plist)"
+          echo "--- Final Info.plist: camera/mic keys ---"
+          plutil -extract NSCameraUsageDescription raw "$PLIST"
+          plutil -extract NSMicrophoneUsageDescription raw "$PLIST"
+          echo "--- Final Info.plist: URL scheme (Google/Apple sign-in callback) ---"
+          plutil -convert json -o - "$PLIST" | grep -q '"com.meetmymenu.app"'
+          echo "com.meetmymenu.app URL scheme present"
+          echo "--- Final Info.plist: export compliance ---"
+          plutil -extract ITSAppUsesNonExemptEncryption raw "$PLIST"
 
     artifacts:
       - build/ios/ipa/*.ipa
