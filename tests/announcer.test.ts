@@ -165,12 +165,19 @@ test('the capture screen has exactly one live region', () => {
   );
 });
 
-test('a captured photo tells the user to turn the page', () => {
+test('a captured photo gives a concise next-page instruction and pauses scanning', () => {
   assert.match(
     captureSrc,
-    /taken\. Turn to the next page/,
+    /Picture taken\. Move to the next page\./,
     'without this people do not know the app is ready for another page, and just wait'
   );
+  assert.match(captureSrc, /const PAGE_TURN_PAUSE_MS = 5000;/);
+  assert.match(captureSrc, /!scannerPaused/);
+  assert.match(captureSrc, /pauseForPageTurn\(\);/);
+});
+
+test('a bad capture gives one concise retake instruction', () => {
+  assert.match(captureSrc, /Picture may be hard to read\. Retake last photo\./);
 });
 
 test('EVERY message about retaking names the button that does it', () => {

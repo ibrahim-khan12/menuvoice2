@@ -41,6 +41,9 @@ import { apiUrl } from '../lib/apiUrl';
 // in a whole page from a comfortable height while keeping the text large
 // enough. Zoom out is one tap away for anything bigger.
 const DEFAULT_ZOOM = 0.8;
+// A person needs time to turn a physical menu page after the shutter fires.
+// This also gives the confirmation a clear, uninterrupted turn to be heard.
+const PAGE_TURN_PAUSE_MS = 5000;
 
 const ANALYSIS_PHRASES = [
   'Still reading your menu, just a moment.',
@@ -103,6 +106,9 @@ export default function CaptureScreen({
   const zoomRef = useRef(1);
   const zoomRangeRef = useRef<ZoomRange>({ min: 1, max: 3, step: 0.25, value: 1, native: false });
   const lastSpokenGuidanceRef = useRef({ text: '', at: 0 });
+  const pageTurnPauseUntilRef = useRef(0);
+  const pageTurnTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const deferredGuidanceRef = useRef('');
 
   const [photos, setPhotosState] = useState<CapturedPhoto[]>([]);
   const [confirmAnalyzeWithIssues, setConfirmAnalyzeWithIssues] = useState(false);
@@ -120,17 +126,26 @@ export default function CaptureScreen({
   const setCoachStatus = (text: string) => announcerRef.current?.announce(text, 'normal');
   const [camError, setCamError] = useState('');
 
-  const sayGuidance = (message: string) => {
+  const sayGuidance = (message: string, holdMs = 0, force = false) => {
     if (!message) return;
-    const last = lastSpokenGuidanceRef.current;
     const now = Date.now();
+    // The capture confirmation and a redo verdict are instructions, not
+    // coaching. Do not let a camera update cut either one off. Keep the newest
+    // deferred coach line for when the protected instruction has finished.
+    if (!force && now < pageTurnPauseUntilRef.current) {
+      deferredGuidanceRef.current = message;
+      return;
+    }
+    const last = lastSpokenGuidanceRef.current;
     if (last.text === message || now - last.at < 1800) return;
     lastSpokenGuidanceRef.current = { text: message, at: now };
+    if (holdMs > 0) pageTurnPauseUntilRef.current = now + holdMs;
     void speak(message);
   };
   const [cameraReady, setCameraReady] = useState(false);
   const [analyzing, setAnalyzing] = useState(false);
   const [autoMode, setAutoMode] = useState(true);
+  const [scannerPaused, setScannerPaused] = useState(false);
   const [previewAspect, setPreviewAspect] = useState('3 / 4');
   const [zoomRange, setZoomRange] = useState<ZoomRange>({ min: 1, max: 3, step: 0.25, value: 1, native: false });
   const [zoom, setZoom] = useState(1);
@@ -150,6 +165,22 @@ export default function CaptureScreen({
       announcerRef.current?.reset();
     };
   }, []);
+
+  useEffect(() => () => {
+    if (pageTurnTimerRef.current) clearTimeout(pageTurnTimerRef.current);
+  }, []);
+
+  const pauseForPageTurn = () => {
+    autoRef.current?.stop();
+    setScannerPaused(true);
+    if (pageTurnTimerRef.current) clearTimeout(pageTurnTimerRef.current);
+    pageTurnTimerRef.current = setTimeout(() => {
+      setScannerPaused(false);
+      const deferred = deferredGuidanceRef.current;
+      deferredGuidanceRef.current = '';
+      if (deferred) sayGuidance(deferred, 1800);
+    }, PAGE_TURN_PAUSE_MS);
+  };
 
   // Start / stop camera.
   useEffect(() => {
@@ -246,7 +277,7 @@ export default function CaptureScreen({
 
   // Run / stop the auto-capture controller.
   useEffect(() => {
-    const active = autoMode && cameraReady && !analyzing && !camError;
+    const active = autoMode && cameraReady && !analyzing && !camError && !scannerPaused;
     if (!active) {
       autoRef.current?.stop();
       return;
@@ -327,7 +358,7 @@ export default function CaptureScreen({
       autoRef.current?.stop();
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [autoMode, cameraReady, analyzing, camError]);
+  }, [autoMode, cameraReady, analyzing, camError, scannerPaused]);
 
   const finishPhotoQuality = (id: number, quality: { ok: boolean; issues: PhotoQualityIssue[] }) => {
     const index = photosRef.current.findIndex((photo) => photo.id === id);
@@ -347,9 +378,9 @@ export default function CaptureScreen({
       },
     });
     if (!quality.ok) {
-      const msg = `Photo ${index + 1}. ${quality.issues.map((i) => i.message).join(' ')} Tap Retake last photo to do it again, or Read menu to go on.`;
+      const msg = 'Picture may be hard to read. Retake last photo.';
       setStatus(msg);
-      sayGuidance(msg);
+      sayGuidance(msg, 2200);
     }
   };
 
@@ -364,12 +395,12 @@ export default function CaptureScreen({
     setPhotos((prev) => {
       const next = [...prev, { id, imageBase64: b64, issues: [], checkingQuality: true }];
       const count = next.length;
-      // "Turn to the next page" is the whole point of this message: without it
-      // people do not know the app is ready for another, and stand there
-      // waiting. Urgent, so it is never cut off by resuming coaching.
-      const msg = `Photo ${count} taken. Turn to the next page, or tap Read menu.`;
+      // Keep this to one action. The scanner pauses for the same handoff so it
+      // cannot take another photo or start talking while the page is turning.
+      const msg = 'Picture taken. Move to the next page.';
       setStatus(msg);
-      sayGuidance(msg);
+      pauseForPageTurn();
+      sayGuidance(msg, PAGE_TURN_PAUSE_MS, true);
       track('capture', 'photo_added', {
         metadata: {
           mode: viaAuto ? 'auto' : 'manual',
