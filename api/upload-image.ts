@@ -3,8 +3,20 @@ import { put } from '@vercel/blob';
 
 // Accepts { imageBase64: string, filename?: string }
 // Only called when the "Save menu photos" toggle is ON.
+//
+// Web calls are same-origin (see apiUrl.ts); the only real cross-origin
+// caller is the signed native app at this custom scheme. Matches the
+// allowlist api/tts.ts and api/events.ts already use, instead of '*' —
+// which let any third-party site's JS silently upload through a visiting
+// user's browser and read back the resulting Blob URL.
+const CAPACITOR_ORIGIN = 'capacitor://localhost';
+
 export default async function handler(req: VercelRequest, res: VercelResponse) {
-  res.setHeader('Access-Control-Allow-Origin', '*');
+  const requestOrigin = String(req.headers.origin || '');
+  if (requestOrigin === CAPACITOR_ORIGIN) {
+    res.setHeader('Access-Control-Allow-Origin', CAPACITOR_ORIGIN);
+    res.setHeader('Vary', 'Origin');
+  }
   res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
   if (req.method === 'OPTIONS') return res.status(200).end();

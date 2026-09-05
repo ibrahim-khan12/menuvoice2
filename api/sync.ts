@@ -125,8 +125,20 @@ async function writeSnapshot(email: string, profile: unknown, restaurants: unkno
   return true;
 }
 
+// Web calls to /api/sync are same-origin (see apiUrl.ts), so the only real
+// cross-origin caller is the signed native app, served from this custom
+// scheme. Matches the allowlist api/tts.ts and api/events.ts already use —
+// a bare '*' here would let any third-party site's JS read this endpoint's
+// responses (session tokens, profile/restaurant data) via a visiting user's
+// browser instead of only the app's own native shell.
+const CAPACITOR_ORIGIN = 'capacitor://localhost';
+
 export default async function handler(req: VercelRequest, res: VercelResponse) {
-  res.setHeader('Access-Control-Allow-Origin', '*');
+  const requestOrigin = String(req.headers.origin || '');
+  if (requestOrigin === CAPACITOR_ORIGIN) {
+    res.setHeader('Access-Control-Allow-Origin', CAPACITOR_ORIGIN);
+    res.setHeader('Vary', 'Origin');
+  }
   res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
   if (req.method === 'OPTIONS') return res.status(200).end();
